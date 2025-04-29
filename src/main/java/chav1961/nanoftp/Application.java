@@ -1,7 +1,10 @@
 package chav1961.nanoftp;
 
+
 import java.io.File;
+
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
@@ -9,6 +12,15 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.NotCompliantMBeanException;
+import javax.management.ObjectName;
+
+import chav1961.nanoftp.jmx.JmxManager;
 import chav1961.purelib.basic.ArgParser;
 import chav1961.purelib.basic.Utils;
 import chav1961.purelib.basic.exceptions.CommandLineParametersException;
@@ -20,7 +32,9 @@ public class Application {
 	public static final String	ARG_FTP_DATA_PORT = "dataPort";
 	public static final String	ARG_FTP_ROOT = "root";
 	public static final String	ARG_ANON_USER = "user";
+	public static final String	ARG_JMX_ENABLE = "jmx";
 	public static final String	ARG_DEBUG_TRACE = "d";
+	public static final String	JMX_NAME = "chav1961.nanoftp:type=basic,name=server";
 
 	public static final AtomicInteger	unique = new AtomicInteger(1);
 	
@@ -45,6 +59,17 @@ public class Application {
 											t.setName("Async copier "+unique.incrementAndGet());
 											return t;
 									});
+			final ObjectName 		jmxName = new ObjectName(JMX_NAME);
+			final MBeanServer 		server = ManagementFactory.getPlatformMBeanServer();
+			final JmxManager		mgr = new JmxManager(null);
+
+			if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
+				server.registerMBean(mgr, jmxName);
+//				if (wrapper.isTraceTurnedOn()) {
+//					wrapper.getLogger().message(Severity.debug, "JMX server started, JMX name is ["+JMX_NAME+"]");
+//				}
+			}
+			
 			
 			try(final ServerSocket		ss = new ServerSocket(ftpPort)) {
 				Runtime.getRuntime().addShutdownHook(new Thread(()->{
@@ -73,6 +98,12 @@ public class Application {
 				if (needDebug) {
 					logger.message(Severity.info, "Nano FTP server stopped");
 				}
+				if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
+					server.unregisterMBean(jmxName);
+//					if (wrapper.isTraceTurnedOn()) {
+//						wrapper.getLogger().message(Severity.debug, "JMX server started, JMX name is ["+JMX_NAME+"]");
+//					}
+				}
 			} finally {
 				exec.shutdownNow();
 			}
@@ -80,7 +111,7 @@ public class Application {
 			System.err.println(e.getLocalizedMessage());
 			System.err.println(parser.getUsage("bt.nanoftp"));
 			System.exit(128);
-		} catch (IOException e) {
+		} catch (IOException | MalformedObjectNameException | InstanceAlreadyExistsException | InstanceNotFoundException |MBeanRegistrationException | NotCompliantMBeanException e) {
 			e.printStackTrace();
 			System.exit(129);
 		}
@@ -92,6 +123,7 @@ public class Application {
 			new IntegerArg(ARG_FTP_DATA_PORT, false, "Fixed FTP data port number to transmit content. If not typed or zero, any scratch port will be used", 0, new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new StringArg(ARG_ANON_USER, false, "Default 'user/password' to login to FTP server. If missing, internal validator will be used", ""),
 			new FileArg(ARG_FTP_ROOT, true, true, "Root directory for FTP server users"),
+			new BooleanArg(ARG_JMX_ENABLE, false, "Turn on JMX to control the service", false),
 			new BooleanArg(ARG_DEBUG_TRACE, false, "Turn on debug trace on stderr", false)
 		};
 		
