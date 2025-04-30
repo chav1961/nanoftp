@@ -5,29 +5,34 @@ import java.io.File;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.URI;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.management.InstanceAlreadyExistsException;
 import javax.management.InstanceNotFoundException;
+import javax.management.JMX;
 import javax.management.MBeanRegistrationException;
 import javax.management.MBeanServer;
+import javax.management.MBeanServerConnection;
 import javax.management.MalformedObjectNameException;
 import javax.management.NotCompliantMBeanException;
 import javax.management.ObjectName;
+import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
 
+import com.sun.tools.attach.AttachNotSupportedException;
+import com.sun.tools.attach.VirtualMachine;
+import com.sun.tools.attach.VirtualMachineDescriptor;
+
+import chav1961.nanoftp.internal.FTPServer;
+import chav1961.nanoftp.internal.ModeList;
 import chav1961.nanoftp.jmx.JmxManager;
+import chav1961.nanoftp.jmx.JmxManagerMBean;
 import chav1961.purelib.basic.ArgParser;
-import chav1961.purelib.basic.Utils;
 import chav1961.purelib.basic.exceptions.CommandLineParametersException;
-import chav1961.purelib.basic.interfaces.LoggerFacade;
 import chav1961.purelib.basic.interfaces.LoggerFacade.Severity;
 
 public class Application {
+	public static final String	ARG_MODE = "mode";
 	public static final String	ARG_FTP_PORT = "port";
 	public static final String	ARG_FTP_DATA_PORT = "dataPort";
 	public static final String	ARG_FTP_ROOT = "root";
@@ -36,89 +41,124 @@ public class Application {
 	public static final String	ARG_DEBUG_TRACE = "d";
 	public static final String	JMX_NAME = "chav1961.nanoftp:type=basic,name=server";
 
-	public static final AtomicInteger	unique = new AtomicInteger(1);
-	
 	public static void main(String[] args) {
 		final ArgParser	parser = new ApplicationArgParser();
 
-		try(final LoggerFacade	logger = LoggerFacade.Factory.newInstance(URI.create(LoggerFacade.LOGGER_SCHEME+":err:/"))) {
+		try {
 			final ArgParser		parsed = parser.parse(args);
 			final File			root = parsed.getValue(ARG_FTP_ROOT, File.class);
 			final int			ftpPort = parsed.getValue(ARG_FTP_PORT, int.class);
 			final int			ftpDataPort = parsed.getValue(ARG_FTP_DATA_PORT, int.class);
 			final String		userPass = parsed.getValue(ARG_ANON_USER, String.class);
 			final boolean		needDebug = parsed.getValue(ARG_DEBUG_TRACE, boolean.class);
+			final ObjectName 	jmxName = new ObjectName(JMX_NAME);
 			
-			final SimpleValidator	validator = Utils.checkEmptyOrNullString(userPass) 
-											? new SimpleValidator(root)
-											: new SimpleValidator(userPass.split("/")[0], userPass.split("/")[1]);
-			final ExecutorService	exec = Executors.newCachedThreadPool((r)->{
-											final Thread	t = new Thread(r); 
-											
-											t.setDaemon(true);
-											t.setName("Async copier "+unique.incrementAndGet());
-											return t;
-									});
-			final ObjectName 		jmxName = new ObjectName(JMX_NAME);
-			final MBeanServer 		server = ManagementFactory.getPlatformMBeanServer();
-			final JmxManager		mgr = new JmxManager(null);
+			if (parsed.isTyped(ARG_MODE)) {
+				final ModeList				mode = parsed.getValue(ARG_MODE, ModeList.class); 
+				final VirtualMachine 		vm = getVM();
+				final String 				jmxUrl = vm.startLocalManagementAgent();
+				final JMXServiceURL 		url = new JMXServiceURL(jmxUrl);
+				final JMXConnector 			connector = JMXConnectorFactory.connect(url);
+				final MBeanServerConnection conn = connector.getMBeanServerConnection();				
+				final JmxManagerMBean		mbeanProxy = JMX.newMBeanProxy(conn, jmxName, JmxManagerMBean.class, true);
 
-			if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
-				server.registerMBean(mgr, jmxName);
-//				if (wrapper.isTraceTurnedOn()) {
-//					wrapper.getLogger().message(Severity.debug, "JMX server started, JMX name is ["+JMX_NAME+"]");
-//				}
-			}
-			
-			
-			try(final ServerSocket		ss = new ServerSocket(ftpPort)) {
-				Runtime.getRuntime().addShutdownHook(new Thread(()->{
-					try {
-						ss.close();
-					} catch (IOException e) {
-					}
-				}));
-				if (needDebug) {
-					logger.message(Severity.info, "Nano FTP server listen on %1$d port", ftpPort);
-				}
-				for (;;) {
-					try {
-						final Socket		sock = ss.accept();
-						
-						final FTPSession 	w = new FTPSession(sock, ftpDataPort, exec, logger, root, validator, needDebug);
-						final Thread		t = new Thread(w);
-		
-						t.setDaemon(true);
-						t.setName("FTP session "+unique.incrementAndGet());
-						t.start();
-					} catch (IOException exc) {
+				switch (mode) {
+					case resume		:
+						mbeanProxy.resume();
 						break;
+					case start		:
+						mbeanProxy.start();
+						break;
+					case stop		:
+						mbeanProxy.stop();
+						break;
+					case suspend	:
+						mbeanProxy.suspend();
+						break;
+					case terminateAndExit	:
+						mbeanProxy.terminateAndExit();
+						break;
+					default:
+						throw new UnsupportedOperationException("Server mode ["+parsed.getValue(ARG_MODE, ModeList.class)+"] is not supported yet");
+				}
+				print("Command completed");
+			}
+			else {
+				
+				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, needDebug)) {
+					final MBeanServer 	mBeanServer = ManagementFactory.getPlatformMBeanServer();
+
+					Runtime.getRuntime().addShutdownHook(new Thread(()->{
+						try {
+							server.shutdown();
+						} catch (IOException e) {
+						}
+					}));
+					
+					if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
+						final JmxManager	mgr = new JmxManager(server);
+						
+						mBeanServer.registerMBean(mgr, jmxName);
+						if (needDebug) {
+							server.getLogger().message(Severity.debug, "JMX server started, JMX name is ["+JMX_NAME+"]");
+						}
+					}
+
+					if (needDebug) {
+						server.getLogger().message(Severity.info, "Nano FTP server listen on [%1$d] port", ftpPort);
+					}
+
+					server.run();
+					
+					if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
+						mBeanServer.unregisterMBean(jmxName);
+						if (needDebug) {
+							server.getLogger().message(Severity.debug, "JMX server stopped");
+						}
+					}
+					if (needDebug) {
+						server.getLogger().message(Severity.info, "Nano FTP server stopped");
 					}
 				}
-				if (needDebug) {
-					logger.message(Severity.info, "Nano FTP server stopped");
-				}
-				if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
-					server.unregisterMBean(jmxName);
-//					if (wrapper.isTraceTurnedOn()) {
-//						wrapper.getLogger().message(Severity.debug, "JMX server started, JMX name is ["+JMX_NAME+"]");
-//					}
-				}
-			} finally {
-				exec.shutdownNow();
 			}
 		} catch (CommandLineParametersException e) {
-			System.err.println(e.getLocalizedMessage());
-			System.err.println(parser.getUsage("bt.nanoftp"));
+			print(e.getLocalizedMessage());
+			print(parser.getUsage("nanoftp"));
 			System.exit(128);
-		} catch (IOException | MalformedObjectNameException | InstanceAlreadyExistsException | InstanceNotFoundException |MBeanRegistrationException | NotCompliantMBeanException e) {
+		} catch (IOException | MalformedObjectNameException | InstanceAlreadyExistsException | InstanceNotFoundException |MBeanRegistrationException | NotCompliantMBeanException | AttachNotSupportedException e) {
 			e.printStackTrace();
 			System.exit(129);
 		}
 	}
 
+	private static VirtualMachine getVM() throws AttachNotSupportedException, IOException {
+		final String	name = Application.class.getProtectionDomain().getCodeSource().getLocation().toString();
+		final String	tail = name.substring(name.lastIndexOf('/')+1);
+				
+		for(VirtualMachineDescriptor item : VirtualMachine.list()) {
+			if (item.displayName().startsWith(tail) && !modeListPresents(item.displayName())) {
+				return VirtualMachine.attach(item);
+			}
+		}
+		throw new AttachNotSupportedException("No any nanoftp servers detected in this computer");
+	}
+
+	private static boolean modeListPresents(final String displayName) {
+		for(ModeList item : ModeList.values()) {
+			if (displayName.contains(" "+item.name()+" ")) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static void print(final String message) {
+		System.err.println(message);
+	}
+	
 	private static class ApplicationArgParser extends ArgParser {
 		private static final ArgParser.AbstractArg[]	KEYS = {
+			new EnumArg<ModeList>(ARG_MODE, ModeList.class, false, true, "Server control mode. Can be used after server startup only. To startup server, do not type this argument"),
 			new IntegerArg(ARG_FTP_PORT, true, false, "FTP server port to connect", new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new IntegerArg(ARG_FTP_DATA_PORT, false, "Fixed FTP data port number to transmit content. If not typed or zero, any scratch port will be used", 0, new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new StringArg(ARG_ANON_USER, false, "Default 'user/password' to login to FTP server. If missing, internal validator will be used", ""),
@@ -144,12 +184,19 @@ public class Application {
 				final String	userPass = parser.getValue(ARG_ANON_USER, String.class);
 				
 				if (!userPass.matches("([a-zA-Z0-9])+/([a-zA-Z0-9])+") ) {
-					return "Illegal 'user/password' string format";
+					return "Illegal 'user/password' string format. User/password must be splitten by '/' and can contain(s) only letters or digits in the name and/or password";
 				}
-				
+
+				if (parser.getValue(ARG_FTP_PORT, int.class) > Character.MAX_VALUE || parser.getValue(ARG_FTP_PORT, int.class) < 0) {
+					return "FTP port ["+parser.getValue(ARG_FTP_PORT, int.class)+"] out of range 0.."+(int)Character.MAX_VALUE;
+				}
+				if (parser.getValue(ARG_FTP_DATA_PORT, int.class) > Character.MAX_VALUE || parser.getValue(ARG_FTP_DATA_PORT, int.class) < 0) {
+					return "FTP data port ["+parser.getValue(ARG_FTP_DATA_PORT, int.class)+"] out of range 0.."+(int)Character.MAX_VALUE;
+				}
 				if (parser.getValue(ARG_FTP_PORT, int.class).equals(parser.getValue(ARG_FTP_DATA_PORT, int.class))) {
 					return "FTP port ["+parser.getValue(ARG_FTP_PORT, int.class)+"] and FTP data port ["+parser.getValue(ARG_FTP_DATA_PORT, int.class)+"] must be different";
 				}
+				
 				return null;
 			}
 			else {

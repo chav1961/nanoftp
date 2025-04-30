@@ -2,7 +2,7 @@ package chav1961.nanoftp.jmx;
 
 import java.io.IOException;
 
-import chav1961.nanoftp.FTPServer;
+import chav1961.nanoftp.internal.FTPServer;
 
 public class JmxManager implements JmxManagerMBean {
 	private final FTPServer	server;

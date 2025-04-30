@@ -1,4 +1,4 @@
-package chav1961.nanoftp;
+package chav1961.nanoftp.internal;
 
 import java.io.File;
 import java.util.Arrays;
