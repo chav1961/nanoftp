@@ -88,7 +88,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 	}
 	
 	@Override
-	public synchronized void start() throws Exception {
+	public synchronized void start() throws IOException {
 		if (isStarted()) {
 			throw new IllegalStateException("Server is started already");
 		}
@@ -101,7 +101,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 	}
 
 	@Override
-	public synchronized void suspend() throws Exception {
+	public synchronized void suspend() throws IOException {
 		if (!isStarted()) {
 			throw new IllegalStateException("Server is not started yet");
 		}
@@ -117,7 +117,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 	}
 
 	@Override
-	public synchronized void resume() throws Exception {
+	public synchronized void resume() throws IOException {
 		if (!isStarted()) {
 			throw new IllegalStateException("Server is not started yet");
 		}
@@ -133,7 +133,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 	}
 
 	@Override
-	public synchronized void stop() throws Exception {
+	public synchronized void stop() throws IOException {
 		if (!isStarted()) {
 			throw new IllegalStateException("Server is not started yet");
 		}

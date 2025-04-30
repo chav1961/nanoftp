@@ -108,6 +108,7 @@ public class Application {
 						server.getLogger().message(Severity.info, "Nano FTP server listen on [%1$d] port", ftpPort);
 					}
 
+					server.start();
 					server.run();
 					
 					if (parsed.getValue(ARG_JMX_ENABLE, boolean.class)) {
