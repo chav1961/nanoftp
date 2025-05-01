@@ -12,6 +12,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -595,7 +596,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private void handlePasv() throws IOException {
 		final SocketAddress	addr = openDataConnectionPassive(0);
 	    final String	host = ((InetSocketAddress)addr).getAddress().getHostAddress();
-	    final int		port = ((InetSocketAddress)addr).getPort();
+	    final int		port = ((InetSocketAddress)addr).getPort();;
 	    final String[]	ip = host.split("\\."); 
 	    final int 		p1 = port / 256;
 	    final int 		p2 = port % 256;
@@ -606,7 +607,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 	private void handleEpsv() throws IOException {
 		final SocketAddress	addr = openDataConnectionPassive(0);
-		final int	port = ((InetSocketAddress)addr).getPort();
+		final int	 port = ((InetSocketAddress)addr).getPort();
 	  
 		sendAnswer(MessageType.MSG_ENTERING_EXTENDED_PASSIVE_MODE, port);
 		waitDataConnectionPassive(port);
@@ -1187,7 +1188,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			if (mode == ConnectionMode.NONE) {
 				try {
 					dataSocket = new ServerSocket(port);
-					return dataSocket.getLocalSocketAddress();
+					return new InetSocketAddress(controlSocket.getLocalAddress(), dataSocket.getLocalPort());
 				} catch (IOException e) {
 					debug("Could not create data connection (port "+port+")");
 					return null;
