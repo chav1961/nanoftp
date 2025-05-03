@@ -40,6 +40,9 @@ public class Application {
 	public static final String	ARG_PROXY = "proxy";
 	public static final String	ARG_JMX_ENABLE = "jmx";
 	public static final String	ARG_DEBUG_TRACE = "d";
+	public static final String	ARG_RFC_2228 = "rfc2228";
+	public static final String	ARG_RFC_2640 = "rfc2640";
+	public static final String	ARG_RFC_3659 = "rfc3659";
 	public static final String	JMX_NAME = "chav1961.nanoftp:type=basic,name=server";
 
 	public static void main(String[] args) {
@@ -167,6 +170,9 @@ public class Application {
 			new NetworkAddressArg(ARG_PROXY, false, false, "Proxy to use. If missing, no proxy will be used"),
 			new FileArg(ARG_FTP_ROOT, true, true, "Root directory for FTP server users"),
 			new BooleanArg(ARG_JMX_ENABLE, false, "Turn on JMX to control the service", false),
+			new BooleanArg(ARG_RFC_2228, false, "Turn on RFC-2228 support on the service", false),
+			new BooleanArg(ARG_RFC_2640, false, "Turn on RFC-2640 support on the service", false),
+			new BooleanArg(ARG_RFC_3659, false, "Turn on RFC-3659 support on the service", false),
 			new BooleanArg(ARG_DEBUG_TRACE, false, "Turn on debug trace on stderr", false)
 		};
 		
