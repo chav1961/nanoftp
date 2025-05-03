@@ -37,6 +37,7 @@ public class Application {
 	public static final String	ARG_FTP_DATA_PORT = "dataPort";
 	public static final String	ARG_FTP_ROOT = "root";
 	public static final String	ARG_ANON_USER = "user";
+	public static final String	ARG_PROXY = "proxy";
 	public static final String	ARG_JMX_ENABLE = "jmx";
 	public static final String	ARG_DEBUG_TRACE = "d";
 	public static final String	JMX_NAME = "chav1961.nanoftp:type=basic,name=server";
@@ -163,6 +164,7 @@ public class Application {
 			new IntegerArg(ARG_FTP_PORT, true, false, "FTP server port to connect", new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new IntegerArg(ARG_FTP_DATA_PORT, false, "Fixed FTP data port number to transmit content. If not typed or zero, any scratch port will be used", 0, new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new StringArg(ARG_ANON_USER, false, "Default 'user/password' to login to FTP server. If missing, internal validator will be used", ""),
+			new NetworkAddressArg(ARG_PROXY, false, false, "Proxy to use. If missing, no proxy will be used"),
 			new FileArg(ARG_FTP_ROOT, true, true, "Root directory for FTP server users"),
 			new BooleanArg(ARG_JMX_ENABLE, false, "Turn on JMX to control the service", false),
 			new BooleanArg(ARG_DEBUG_TRACE, false, "Turn on debug trace on stderr", false)
