@@ -12,7 +12,6 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -186,6 +185,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		MSG_USER_ALREADY_LOGGED(530," User already logged in\r\n"),
 		MSG_USER_NOT_LOGGED(530," Command in wrong context (possibly not logged in)\r\n"),
 		MSG_USER_NOT_ENTERED(530," User name is not entered yet\r\n"),
+		MSG_WRONG_CREDENTIALS(530," Wrong credentials for user typed\r\n"),
 		MSG_FAILURE_FILE_UNAVAILABLE(550, " Requested action not taken. File %1$s unavailable.\r\n"),
 		MSG_FAILURE_FILE_NOT_EXISTS(550, " Entity %1$s does not exist, not a file or is not available for current user\r\n"),
 		MSG_FAILURE_DIRECTORY_NOT_EXISTS(550, " Entity %1$s does not exist, not a directory or is not available for current user\r\n"),
@@ -269,11 +269,12 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
   
 	@Override
 	public void run() {
-		debug("FTP session started, current working directory is <" + this.currDirectory + ">");
+		debug("FTP session started, remote address is ["+controlSocket.getRemoteSocketAddress()+"], current working directory is <" + this.currDirectory + ">");
 
-		try(final BufferedReader	controlIn = new BufferedReader(new InputStreamReader(controlSocket.getInputStream()));
-			final Writer			controlOutWriter = new OutputStreamWriter(controlSocket.getOutputStream())) {
-			String	line;
+		try(final Socket	s = 	controlSocket;
+			final BufferedReader	controlIn = new BufferedReader(new InputStreamReader(s.getInputStream()));
+			final Writer	controlOutWriter = new OutputStreamWriter(s.getOutputStream())) {
+			String			line;
 
 			this.controlOutWriter = controlOutWriter;
 			sendAnswer(MessageType.MSG_WELCOME);
@@ -283,14 +284,14 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 				}
 			}
 		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				controlSocket.close();
-				debug("FTP session ended");
-			} catch (IOException e) {
-				debug("Could not close socket");
+			if (future != null && !future.isDone()) {
+				future.cancel(true);
 			}
+			if (debugMode) {
+				e.printStackTrace();
+			}
+		} finally {
+			debug("FTP session on ["+controlSocket.getRemoteSocketAddress()+"] ended");
 		}
 	}
 
@@ -298,11 +299,11 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		final int 		blank = c.indexOf(' ');
 		final String 	command = blank == -1 ? c : c.substring(0, blank);
 		final String 	args = blank == -1 ? "" : c.substring(blank + 1).trim();
-		  
-		debug("Command: " + command + ", args: <" + args + ">");
+		
 		try {
 			final Commands	cmd = Commands.valueOf(command.trim().toUpperCase());
-	
+
+			debug("Command: " + cmd + ", args: <" + (cmd == Commands.PASS ? "***" : args) + ">");
 			if (cmd.getContext() != null && cmd.getContext() != currentLoggingStatus) {
 				sendAnswer(MessageType.MSG_USER_NOT_LOGGED);
 				return true;
@@ -447,6 +448,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 				}
 			}
 		} catch (IllegalArgumentException exc) {
+			debug("Wrong command: " + command);
 			sendAnswer(MessageType.MSG_UNKNOWN_COMMAND);
 			return true;
 		}
@@ -501,7 +503,9 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 						sendAnswer(MessageType.MSG_USER_LOGGED);
 					}
 					else {
-						sendAnswer(MessageType.MSG_USER_NOT_LOGGED);
+						sendAnswer(MessageType.MSG_WRONG_CREDENTIALS);
+						sendAnswer(MessageType.MSG_WELCOME);
+						currentLoggingStatus = LoggingStatus.NOTLOGGEDIN;
 					}
 					break;
 				default:
@@ -621,7 +625,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 
 	private void handlePasv() throws IOException {
-		final SocketAddress	addr = openDataConnectionPassive(0);
+		final SocketAddress	addr = openDataConnectionPassive(dataPort);
 	    final String	host = ((InetSocketAddress)addr).getAddress().getHostAddress();
 	    final int		port = ((InetSocketAddress)addr).getPort();;
 	    final String[]	ip = host.split("\\."); 
@@ -633,7 +637,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 
 	private void handleEpsv() throws IOException {
-		final SocketAddress	addr = openDataConnectionPassive(0);
+		final SocketAddress	addr = openDataConnectionPassive(dataPort);
 		final int	 port = ((InetSocketAddress)addr).getPort();
 	  
 		sendAnswer(MessageType.MSG_ENTERING_EXTENDED_PASSIVE_MODE, port);

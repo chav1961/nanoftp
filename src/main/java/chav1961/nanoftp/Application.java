@@ -166,12 +166,12 @@ public class Application {
 	
 	private static class ApplicationArgParser extends ArgParser {
 		private static final ArgParser.AbstractArg[]	KEYS = {
-			new EnumArg<ModeList>(ARG_MODE, ModeList.class, false, true, "Server control mode. Can be used after server startup only. To startup server, do not type this argument"),
+			new EnumArg<ModeList>(ARG_MODE, ModeList.class, false, true, "Server control mode. Can be used after server startup only. To use this option, '-jmx' key must be typed on server startup. To startup server, do not type this argument"),
 			new IntegerArg(ARG_FTP_PORT, true, false, "FTP server port to connect", new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new IntegerArg(ARG_FTP_DATA_PORT, false, "Fixed FTP data port number to transmit content. If not typed or zero, any scratch port will be used", 0, new long[][]{new long[]{1024, Character.MAX_VALUE}}),
 			new StringArg(ARG_ANON_USER, false, "Default 'user/password' to login to FTP server. If missing, internal validator will be used", ""),
 			new NetworkAddressArg(ARG_PROXY, false, false, "Proxy to use. If missing, no proxy will be used"),
-			new FileArg(ARG_FTP_ROOT, true, true, "Root directory for FTP server users"),
+			new FileArg(ARG_FTP_ROOT, true, false, "Root directory for FTP server users"),
 			new BooleanArg(ARG_JMX_ENABLE, false, "Turn on JMX to control the service", false),
 			new BooleanArg(ARG_RFC_2228, false, "Turn on RFC-2228 support on the service", false),
 			new BooleanArg(ARG_RFC_2640, false, "Turn on RFC-2640 support on the service", false),
