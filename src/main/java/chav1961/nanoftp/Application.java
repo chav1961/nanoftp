@@ -54,6 +54,9 @@ public class Application {
 			final int			ftpPort = parsed.getValue(ARG_FTP_PORT, int.class);
 			final int			ftpDataPort = parsed.getValue(ARG_FTP_DATA_PORT, int.class);
 			final String		userPass = parsed.getValue(ARG_ANON_USER, String.class);
+			final boolean		supportRFC2228 = parsed.getValue(ARG_RFC_2228, boolean.class);
+			final boolean		supportRFC2640 = parsed.getValue(ARG_RFC_2640, boolean.class);
+			final boolean		supportRFC3659 = parsed.getValue(ARG_RFC_3659, boolean.class);
 			final boolean		needDebug = parsed.getValue(ARG_DEBUG_TRACE, boolean.class);
 			final ObjectName 	jmxName = new ObjectName(JMX_NAME);
 			
@@ -89,7 +92,7 @@ public class Application {
 			}
 			else {
 				
-				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, needDebug)) {
+				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, supportRFC2228, supportRFC2640, supportRFC3659, needDebug)) {
 					final MBeanServer 	mBeanServer = ManagementFactory.getPlatformMBeanServer();
 
 					Runtime.getRuntime().addShutdownHook(new Thread(()->{

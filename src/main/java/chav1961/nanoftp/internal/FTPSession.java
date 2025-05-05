@@ -46,58 +46,62 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 	
 	private static enum Commands {
-		USER(false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
-		PASS(false, false, LoggingStatus.USERNAMEENTERED, "<Password>", "Type password to logon"),
-		ACCT(false, false, null, "<Info>", "Account information"),
-		CWD(false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
-		CDUP(false, false, LoggingStatus.LOGGEDIN, "", "Change current directory to it's parent"),
-		SMNT(false, false, LoggingStatus.LOGGEDIN, "<PathName>", "Mount file system to current session"),
-  		QUIT(true, false, null, "", "Close connection and quit"),
-		REIN(false, false, null, "", "Reset and reinitialize connection"),
-		PORT(false, false, LoggingStatus.LOGGEDIN, "<ip0>,<ip1>,<ip2>,<ip3>,<portHi>,<portLo>}", "Enter active mode"),
-		PASV(false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode"),
-  		TYPE(false, false, LoggingStatus.LOGGEDIN, "{{A|E} [{N|T|A}] | I | L <byteSize>}", "Set transmission content type"),
-		STRU(false, false, LoggingStatus.LOGGEDIN, "{F|R|P}", "Define structiure of the file to transfer"),
-  		MODE(false, false, LoggingStatus.LOGGEDIN, "{S|B|C}", "Set transmission mode"),
-  		RETR(false, false, LoggingStatus.LOGGEDIN, "<File2Read>", "Read file content"),
-  		STOR(false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content"),
-  		STOU(false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content with typed or unique name"), // *
-  		APPE(false, false, LoggingStatus.LOGGEDIN, "<File2Append>", "Append file content"),
-  		ALLO(false, false, LoggingStatus.LOGGEDIN, "<Space> [R <Space>]", "Try to allocate space for file to store"),
-  		REST(false, false, LoggingStatus.LOGGEDIN, "<Marker>", "Restore transfer to typed marker"),
-  		RNFR(false, false, LoggingStatus.LOGGEDIN, "<File2Rename>", "Begin to rename file"),
-  		RNTO(false, false, LoggingStatus.LOGGEDIN, "<RenamedFileName>", "End to rename file"),
-  		ABOR(false, false, LoggingStatus.LOGGEDIN, "", "Cancel file transfer"),
-  		DELE(false, false, LoggingStatus.LOGGEDIN, "<File2Remove>", "Remove file typed"),
-  		RMD(false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
-  		XRMD(false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
-  		MKD(false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
-		XMKD(false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
-		PWD(false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
-  		XPWD(false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
-		LIST(false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List current or typed directory content in Unix 'ls' format"),
-  		NLST(false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List names from current or typed directory"),
-  		SITE(false, false, LoggingStatus.LOGGEDIN, "<Command> [<parameters>]", "Execute command in the server"),
-		SYST(false, false, null, "", "Print OS name"),
-  		STAT(false, false, null, "[<File>]", "Get status of the server, transmission or file/directory"),
-  		HELP(false, false, null, "[<CommandAbbr>]", "Print either command list or typed command description"),
-		NOOP(false, false, null, "", "No operation. Usually used as 'ping'"),
-		FEAT(false, false, null, "", "Get list of features for the given FTP server"),
-  		EPSV(false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
-  		EPRT(false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
+		USER(false, false, false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
+		PASS(false, false, false, false, LoggingStatus.USERNAMEENTERED, "<Password>", "Type password to logon"),
+		ACCT(false, false, false, false, null, "<Info>", "Account information"),
+		CWD(false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
+		CDUP(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Change current directory to it's parent"),
+		SMNT(false, false, false, false, LoggingStatus.LOGGEDIN, "<PathName>", "Mount file system to current session"),
+  		QUIT(true, false, false, false, null, "", "Close connection and quit"),
+		REIN(false, false, false, false, null, "", "Reset and reinitialize connection"),
+		PORT(false, false, false, false, LoggingStatus.LOGGEDIN, "<ip0>,<ip1>,<ip2>,<ip3>,<portHi>,<portLo>}", "Enter active mode"),
+		PASV(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode"),
+  		TYPE(false, false, false, false, LoggingStatus.LOGGEDIN, "{{A|E} [{N|T|A}] | I | L <byteSize>}", "Set transmission content type"),
+		STRU(false, false, false, false, LoggingStatus.LOGGEDIN, "{F|R|P}", "Define structiure of the file to transfer"),
+  		MODE(false, false, false, false, LoggingStatus.LOGGEDIN, "{S|B|C}", "Set transmission mode"),
+  		RETR(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Read>", "Read file content"),
+  		STOR(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content"),
+  		STOU(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content with typed or unique name"), // *
+  		APPE(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Append>", "Append file content"),
+  		ALLO(false, false, false, false, LoggingStatus.LOGGEDIN, "<Space> [R <Space>]", "Try to allocate space for file to store"),
+  		REST(false, false, false, false, LoggingStatus.LOGGEDIN, "<Marker>", "Restore transfer to typed marker"),
+  		RNFR(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Rename>", "Begin to rename file"),
+  		RNTO(false, false, false, false, LoggingStatus.LOGGEDIN, "<RenamedFileName>", "End to rename file"),
+  		ABOR(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Cancel file transfer"),
+  		DELE(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Remove>", "Remove file typed"),
+  		RMD(false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
+  		XRMD(false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
+  		MKD(false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
+		XMKD(false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
+		PWD(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
+  		XPWD(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
+		LIST(false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List current or typed directory content in Unix 'ls' format"),
+  		NLST(false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List names from current or typed directory"),
+  		SITE(false, false, false, false, LoggingStatus.LOGGEDIN, "<Command> [<parameters>]", "Execute command in the server"),
+		SYST(false, false, false, false, null, "", "Print OS name"),
+  		STAT(false, false, false, false, null, "[<File>]", "Get status of the server, transmission or file/directory"),
+  		HELP(false, false, false, false, null, "[<CommandAbbr>]", "Print either command list or typed command description"),
+		NOOP(false, false, false, false, null, "", "No operation. Usually used as 'ping'"),
+		FEAT(false, false, false, false, null, "", "Get list of features for the given FTP server"),
+  		EPSV(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
+  		EPRT(false, false, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
   	// Extended commands		
-  		SIZE(false, true, LoggingStatus.LOGGEDIN, "", ""),
+  		SIZE(false, false, false, false, LoggingStatus.LOGGEDIN, "", ""),
   		;
 		
 		private final boolean		exitRequred;
-		private final boolean		isFeature;
+		private final boolean		isRFC2228;
+		private final boolean		isRFC2640;
+		private final boolean		isRFC3659;
 		private final LoggingStatus	context;
 		private final String		args;
 		private final String		descriptor;
 		
-		private Commands(final boolean exitRequired, final boolean isFeature, final LoggingStatus context, final String args, final String descriptor) {
+		private Commands(final boolean exitRequired, final boolean isRFC2228, final boolean isRFC2640, final boolean isRFC3659, final LoggingStatus context, final String args, final String descriptor) {
 			this.exitRequred = exitRequired;
-			this.isFeature = isFeature;
+			this.isRFC2228 = isRFC2228;
+			this.isRFC2640 = isRFC2640;
+			this.isRFC3659 = isRFC3659;
 			this.context = context;
 			this.args = args;
 			this.descriptor = descriptor;
@@ -107,8 +111,20 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			return exitRequred;
 		}
 
+		public boolean isRFC2228() {
+			return isRFC2228;
+		}
+		
+		public boolean isRFC2640() {
+			return isRFC2640;
+		}
+		
+		public boolean isRFC3659() {
+			return isRFC3659;
+		}
+		
 		public boolean isFeature() {
-			return isFeature;
+			return isRFC2228 || isRFC2640 || isRFC3659;
 		}
 		
 		public LoggingStatus getContext() {
@@ -161,6 +177,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		MSG_NO_DATA_CONNECTION(425, " No data connection was established\r\n"),
 		MSG_ABORT_DATA_CONNECTION(426, " Transfer errors detected, connection closed\r\n"),
 		MSG_UNKNOWN_COMMAND(500, " Unknown command\r\n"),
+		MSG_UNSUPPORTED_COMMAND(500, " Unsupported command (possibly, -rfcZZZZ key in the server command line is required)\r\n"),
 		MSG_ILLEGAL_ARGUMENT(501, " Illegal argument [%1$s]\r\n"),
 		MSG_MISSING_FILE_NAME(501, " File name missing\r\n"),
 		MSG_MISSING_RNFR_BEFORE_RNTO(503, " RNTO command without RNFR preceding\r\n"),
@@ -216,6 +233,9 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private final LoggerFacade		logger;
 	private final File 				root;
 	private final DataConnection	conn = new DataConnection();
+	private final boolean 			supportRFC2228;
+	private final boolean 			supportRFC2640;
+	private final boolean 			supportRFC3659;
 	private final boolean 			debugMode;
 	private final SimpleValidator	validator;
 
@@ -228,12 +248,15 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private DataCopier			copier = null;
 	private Future<?>			future = null;
   
-	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean debugMode) {
+	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2640, final boolean supportRFC3659, final boolean debugMode) {
 	    this.controlSocket = client;
 	    this.dataPort = dataPort;
 	    this.service = service;
 	    this.logger = logger;
 	    this.validator = validator;
+	    this.supportRFC2228 = supportRFC2228;
+	    this.supportRFC2640 = supportRFC2640;
+	    this.supportRFC3659 = supportRFC3659;
 	    this.debugMode = debugMode;
 	    this.root = root;
 	    clearSettings();
@@ -282,6 +305,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	
 			if (cmd.getContext() != null && cmd.getContext() != currentLoggingStatus) {
 				sendAnswer(MessageType.MSG_USER_NOT_LOGGED);
+				return true;
+			}
+			else if(cmd.isRFC2228() && !supportRFC2228 || cmd.isRFC2640() && !supportRFC2640 || cmd.isRFC3659() && !supportRFC3659) {
+				sendAnswer(MessageType.MSG_UNSUPPORTED_COMMAND);
 				return true;
 			}
 			else {

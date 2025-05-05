@@ -30,11 +30,14 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 	private final int				dataPort;
 	private final File				root;
 	private final SimpleValidator	validator;
+	private final boolean 			supportRFC2228;
+	private final boolean 			supportRFC2640;
+	private final boolean 			supportRFC3659;
 	private final boolean			needDebug;
 	private volatile boolean		isStarted = false;
 	private volatile boolean		isSuspended = false;
 	
-	public FTPServer(final int serverPort, final int dataPort, final File root, final String userPass, final boolean needDebug) throws IOException {
+	public FTPServer(final int serverPort, final int dataPort, final File root, final String userPass, final boolean supportRFC2228, final boolean supportRFC2640, final boolean supportRFC3659, final boolean needDebug) throws IOException {
 		if (serverPort < 0 || serverPort > Character.MAX_VALUE) {
 			throw new IllegalArgumentException("Server port ["+serverPort+"] out of range 0.."+(int)Character.MAX_VALUE);
 		}
@@ -51,6 +54,9 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 			this.validator = Utils.checkEmptyOrNullString(userPass) 
 								? new SimpleValidator(root)
 								: new SimpleValidator(userPass.split("/")[0], userPass.split("/")[1]);
+		    this.supportRFC2228 = supportRFC2228;
+		    this.supportRFC2640 = supportRFC2640;
+		    this.supportRFC3659 = supportRFC3659;
 			this.needDebug = needDebug;
 		}
 	}
@@ -67,7 +73,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 				final Socket		sock = ss.accept();
 				
 				if (isStarted() && !isSuspended()) {
-					final FTPSession 	w = new FTPSession(sock, dataPort, exec, logger, root, validator, needDebug);
+					final FTPSession 	w = new FTPSession(sock, dataPort, exec, logger, root, validator, supportRFC2228, supportRFC2640, supportRFC3659, needDebug);
 					final Thread		t = new Thread(w);
 		
 					t.setDaemon(true);
