@@ -45,60 +45,78 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 	
 	private static enum Commands {
-		USER(false, false, false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
-		PASS(false, false, false, false, LoggingStatus.USERNAMEENTERED, "<Password>", "Type password to logon"),
-		ACCT(false, false, false, false, null, "<Info>", "Account information"),
-		CWD(false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
-		CDUP(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Change current directory to it's parent"),
-		SMNT(false, false, false, false, LoggingStatus.LOGGEDIN, "<PathName>", "Mount file system to current session"),
-  		QUIT(true, false, false, false, null, "", "Close connection and quit"),
-		REIN(false, false, false, false, null, "", "Reset and reinitialize connection"),
-		PORT(false, false, false, false, LoggingStatus.LOGGEDIN, "<ip0>,<ip1>,<ip2>,<ip3>,<portHi>,<portLo>}", "Enter active mode"),
-		PASV(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode"),
-  		TYPE(false, false, false, false, LoggingStatus.LOGGEDIN, "{{A|E} [{N|T|A}] | I | L <byteSize>}", "Set transmission content type"),
-		STRU(false, false, false, false, LoggingStatus.LOGGEDIN, "{F|R|P}", "Define structiure of the file to transfer"),
-  		MODE(false, false, false, false, LoggingStatus.LOGGEDIN, "{S|B|C}", "Set transmission mode"),
-  		RETR(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Read>", "Read file content"),
-  		STOR(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content"),
-  		STOU(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content with typed or unique name"), // *
-  		APPE(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Append>", "Append file content"),
-  		ALLO(false, false, false, false, LoggingStatus.LOGGEDIN, "<Space> [R <Space>]", "Try to allocate space for file to store"),
-  		REST(false, false, false, false, LoggingStatus.LOGGEDIN, "<Marker>", "Restore transfer to typed marker"),
-  		RNFR(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Rename>", "Begin to rename file"),
-  		RNTO(false, false, false, false, LoggingStatus.LOGGEDIN, "<RenamedFileName>", "End to rename file"),
-  		ABOR(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Cancel file transfer"),
-  		DELE(false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Remove>", "Remove file typed"),
-  		RMD(false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
-  		XRMD(false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
-  		MKD(false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
-		XMKD(false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
-		PWD(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
-  		XPWD(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
-		LIST(false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List current or typed directory content in Unix 'ls' format"),
-  		NLST(false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List names from current or typed directory"),
-  		SITE(false, false, false, false, LoggingStatus.LOGGEDIN, "<Command> [<parameters>]", "Execute command in the server"),
-		SYST(false, false, false, false, null, "", "Print OS name"),
-  		STAT(false, false, false, false, null, "[<File>]", "Get status of the server, transmission or file/directory"),
-  		HELP(false, false, false, false, null, "[<CommandAbbr>]", "Print either command list or typed command description"),
-		NOOP(false, false, false, false, null, "", "No operation. Usually used as 'ping'"),
-		FEAT(false, false, false, false, null, "", "Get list of features for the given FTP server"),
-  		EPSV(false, false, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
-  		EPRT(false, false, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
-  	// Extended commands		
-  		SIZE(false, false, false, false, LoggingStatus.LOGGEDIN, "", ""),
+		USER(false, false, false, false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
+		PASS(false, false, false, false, false, LoggingStatus.USERNAMEENTERED, "<Password>", "Type password to logon"),
+		ACCT(false, false, false, false, false, null, "<Info>", "Account information"),
+		CWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
+		XCWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
+		CDUP(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Change current directory to it's parent"),
+		SMNT(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<PathName>", "Mount file system to current session"),
+  		QUIT(true, false, false, false, false, null, "", "Close connection and quit"),
+		REIN(false, false, false, false, false, null, "", "Reset and reinitialize connection"),
+		PORT(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<ip0>,<ip1>,<ip2>,<ip3>,<portHi>,<portLo>}", "Enter active mode"),
+		PASV(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode"),
+  		TYPE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "{{A|E} [{N|T|A}] | I | L <byteSize>}", "Set transmission content type"),
+		STRU(false, false, false, false, false, LoggingStatus.LOGGEDIN, "{F|R|P}", "Define structiure of the file to transfer"),
+  		MODE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "{S|B|C}", "Set transmission mode"),
+  		RETR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Read>", "Read file content"),
+  		STOR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content"),
+  		STOU(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content with typed or unique name"), // *
+  		APPE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Append>", "Append file content"),
+  		ALLO(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Space> [R <Space>]", "Try to allocate space for file to store"),
+  		REST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Marker>", "Restore transfer to typed marker"),
+  		RNFR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Rename>", "Begin to rename file"),
+  		RNTO(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<RenamedFileName>", "End to rename file"),
+  		ABOR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Cancel file transfer"),
+  		DELE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Remove>", "Remove file typed"),
+  		RMD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
+  		XRMD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
+  		MKD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
+		XMKD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
+		PWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
+  		XPWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
+		LIST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List current or typed directory content in Unix 'ls' format"),
+  		NLST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List names from current or typed directory"),
+  		SITE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Command> [<parameters>]", "Execute command in the server"),
+		SYST(false, false, false, false, false, null, "", "Print OS name"),
+  		STAT(false, false, false, false, false, null, "[<File>]", "Get status of the server, transmission or file/directory"),
+  		HELP(false, false, false, false, false, null, "[<CommandAbbr>]", "Print either command list or typed command description"),
+		NOOP(false, false, false, false, false, null, "", "No operation. Usually used as 'ping'"),
+		AUTH(false, true, false, false, false, null, "<base64-content>", "Authentication/security mechanism"),
+		ADAT(false, true, false, false, false, null, "<base64-content>", "Authentication/security data"),
+		PROT(false, true, false, false, false, null, "<base64-content>", "Channel protection level"),
+		PBSZ(false, true, false, false, false, null, "<base64-content>", "Protection buffer size"),
+		CCC(false, true, false, false, false, null, "<base64-content>", "Clear command channel"),
+		XCCC(false, true, false, false, false, null, "<base64-content>", "Clear command channel"),
+		MIC(false, true, false, false, false, null, "<base64-content>", "Integrity protection command"),
+		XMIC(false, true, false, false, false, null, "<base64-content>", "Integrity protection command"),
+		CONF(false, true, false, false, false, null, "<base64-content>", "Confidentiality protection command"),
+		ENC(false, true, false, false, false, null, "<base64-content>", "Privacy protection command"),
+		XENC(false, true, false, false, false, null, "<base64-content>", "Privacy protection command"),
+		FEAT(false, false, false, false, false, null, "", "Get list of features for the given FTP server"),
+  		EPSV(false, false, true, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
+  		EPRT(false, false, true, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
+		LANG(false, false, false, true, false, null, "<base64-content>", "Language settings"),
+		MDTM(false, false, false, false, true, null, "<base64-content>", "File modification time"),
+		TVFS(false, false, false, false, true, null, "<base64-content>", "File modification time"),
+		MLST(false, false, false, false, true, null, "<base64-content>", "File modification time"),
+		MLSD(false, false, false, false, true, null, "<base64-content>", "File modification time"),
+  		SIZE(false, false, false, false, true, LoggingStatus.LOGGEDIN, "", ""),
   		;
 		
 		private final boolean		exitRequred;
 		private final boolean		isRFC2228;
+		private final boolean		isRFC2428;
 		private final boolean		isRFC2640;
 		private final boolean		isRFC3659;
 		private final LoggingStatus	context;
 		private final String		args;
 		private final String		descriptor;
 		
-		private Commands(final boolean exitRequired, final boolean isRFC2228, final boolean isRFC2640, final boolean isRFC3659, final LoggingStatus context, final String args, final String descriptor) {
+		private Commands(final boolean exitRequired, final boolean isRFC2228, final boolean isRFC2428, final boolean isRFC2640, final boolean isRFC3659, final LoggingStatus context, final String args, final String descriptor) {
 			this.exitRequred = exitRequired;
 			this.isRFC2228 = isRFC2228;
+			this.isRFC2428 = isRFC2428;
 			this.isRFC2640 = isRFC2640;
 			this.isRFC3659 = isRFC3659;
 			this.context = context;
@@ -112,6 +130,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 		public boolean isRFC2228() {
 			return isRFC2228;
+		}
+		
+		public boolean isRFC2428() {
+			return isRFC2428;
 		}
 		
 		public boolean isRFC2640() {
@@ -163,6 +185,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private final File 				root;
 	private final DataConnection	conn = new DataConnection();
 	private final boolean 			supportRFC2228;
+	private final boolean 			supportRFC2428;
 	private final boolean 			supportRFC2640;
 	private final boolean 			supportRFC3659;
 	private final boolean 			debugMode;
@@ -177,13 +200,14 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private DataCopier			copier = null;
 	private Future<?>			future = null;
   
-	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2640, final boolean supportRFC3659, final boolean debugMode) {
+	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final boolean debugMode) {
 	    this.controlSocket = client;
 	    this.dataPort = dataPort;
 	    this.service = service;
 	    this.logger = logger;
 	    this.validator = validator;
 	    this.supportRFC2228 = supportRFC2228;
+	    this.supportRFC2428 = supportRFC2428;
 	    this.supportRFC2640 = supportRFC2640;
 	    this.supportRFC3659 = supportRFC3659;
 	    this.debugMode = debugMode;
@@ -237,105 +261,58 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 				sendAnswer(MessageType.MSG_USER_NOT_LOGGED);
 				return true;
 			}
-			else if(cmd.isRFC2228() && !supportRFC2228 || cmd.isRFC2640() && !supportRFC2640 || cmd.isRFC3659() && !supportRFC3659) {
+			else if(cmd.isRFC2228() && !supportRFC2228 || cmd.isRFC2428() && !supportRFC2428 || cmd.isRFC2640() && !supportRFC2640 || cmd.isRFC3659() && !supportRFC3659) {
 				sendAnswer(MessageType.MSG_UNSUPPORTED_COMMAND);
 				return true;
 			}
 			else {
 				try {
 					switch (cmd) {
-						case ABOR:
-					  		handleAbor();
-							break;
-						case ACCT:
-					  		handleAcct();
-							break;
-						case ALLO:
-					  		handleAllo(args);
-							break;
-						case APPE:
-					  		handleStor(args, true, false);
-							break;
-						case CDUP:
-					  		handleCwd("..");
-							break;
-						case CWD:
-					  		handleCwd(args);
-							break;
-						case DELE:
-					  		handleDele(args);
-							break;
-						case EPRT:
-					  		handleEPort(args);
-							break;
-						case EPSV:
-					  		handleEpsv();
-							break;
-						case FEAT:
-					  		handleFeat();
-							break;
-						case HELP:
-					  		handleHelp(args);
-							break;
-						case LIST:
-					  		handleList(args);
-							break;
-						case MKD:
-					  		handleMkd(args);
-							break;
-						case MODE:
-					  		handleMode(args.toUpperCase());
-							break;
-						case NLST:
-					  		handleNlst(args);
-							break;
-						case NOOP:
-					  		handleNoop();
+						// Chapter 4.1.1 RFC-959.
+						case USER:
+					  		handleUser(args);
 							break;
 						case PASS:
 					  		handlePass(args);
 							break;
-						case PASV:
-					  		handlePasv();
+						case ACCT:
+					  		handleAcct();
 							break;
-						case PORT:
-					  		handlePort(args);
+						case CWD:
+						case XCWD:
+					  		handleCwd(args);
 							break;
-						case PWD:
-					  		handlePwd();
+						case CDUP:
+					  		handleCwd("..");
 							break;
-						case QUIT:
-					  		handleQuit();
+						case SMNT:	// TODO:
+					  		handleSmnt();
 							break;
 						case REIN:
 					  		handleRein();
 							break;
-						case REST:
-					  		handleRest(args);
+						case QUIT:
+					  		handleQuit();
 							break;
+						// Chapter 4.1.2 RFC-959.
+						case PORT:
+					  		handlePort(args);
+							break;
+						case PASV:
+					  		handlePasv();
+							break;
+						case TYPE:
+					  		handleType(args.toUpperCase());
+							break;
+						case STRU:	// TODO:
+					  		handleStru(args.toUpperCase());
+							break;
+						case MODE:
+					  		handleMode(args.toUpperCase());
+							break;
+						// Chapter 4.1.3 RFC-959.
 						case RETR:
 					  		handleRetr(args);
-							break;
-						case RMD:
-					  		handleRmd(args);
-							break;
-						case RNFR:
-					  		handleRnfr(args);
-							break;
-						case RNTO:
-					  		handleRnto(args);
-							break;
-						case SITE:
-					  		handleSite();
-							break;
-						case SIZE:
-					  		handleSize(args);
-							break;
-						case SMNT:
-					  		handleSmnt();
-							break;
-						case STAT:
-					  		handleStat(args);
 							break;
 						case STOR:
 					  		handleStor(args, false, false);
@@ -343,27 +320,95 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 						case STOU:
 					  		handleStor(args, false, true);
 							break;
-						case STRU:
-					  		handleStru(args.toUpperCase());
+						case APPE:
+					  		handleStor(args, true, false);
+							break;
+						case ALLO:
+					  		handleAllo(args);
+							break;
+						case REST:
+					  		handleRest(args);
+							break;
+						case RNFR:
+					  		handleRnfr(args);
+							break;
+						case RNTO:
+					  		handleRnto(args);
+							break;
+						case ABOR:
+					  		handleAbor();
+							break;
+						case DELE:
+					  		handleDele(args);
+							break;
+						case RMD:
+						case XRMD:
+					  		handleRmd(args);
+							break;
+						case MKD:
+						case XMKD:
+					  		handleMkd(args);
+							break;
+						case PWD:
+						case XPWD:
+					  		handlePwd();
+							break;
+						case LIST:
+					  		handleList(args);
+							break;
+						case NLST:
+					  		handleNlst(args);
+							break;
+						case SITE:	// TODO:
+					  		handleSite();
 							break;
 						case SYST:
 					  		handleSyst();
 							break;
-						case TYPE:
-					  		handleType(args.toUpperCase());
+						case STAT:
+					  		handleStat(args);
 							break;
-						case USER:
-					  		handleUser(args);
+						case HELP:
+					  		handleHelp(args);
 							break;
-						case XMKD:
-					  		handleMkd(args);
+						case NOOP:
+					  		handleNoop();
 							break;
-						case XPWD:
-					  		handlePwd();
+						case FEAT:
+					  		handleFeat();
 							break;
-						case XRMD:
-					  		handleRmd(args);
+						// RFC-2228.
+						case AUTH:	// TODO:
+						case ADAT:	// TODO:
+						case PROT:	// TODO:
+						case PBSZ:	// TODO:
+						case CCC:	// TODO:
+						case XCCC:	// TODO:
+						case MIC:	// TODO:
+						case XMIC:	// TODO:
+						case CONF:	// TODO:
+						case ENC:	// TODO:
+						case XENC:	// TODO:							
+					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
+						// RFC-2428.
+						case EPRT:
+					  		handleEPort(args);
 							break;
+						case EPSV:
+					  		handleEpsv();
+							break;
+						// RFC-2640.
+						case LANG:	// TODO:							
+					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
+						// RFC-3659.
+						case SIZE:
+					  		handleSize(args);
+							break;
+						case MDTM:	// TODO:
+						case TVFS:	// TODO:
+						case MLST:	// TODO:
+						case MLSD:	// TODO:
+					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
 						default:
 					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
 					}

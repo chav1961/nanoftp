@@ -41,8 +41,10 @@ public class Application {
 	public static final String	ARG_JMX_ENABLE = "jmx";
 	public static final String	ARG_DEBUG_TRACE = "d";
 	public static final String	ARG_RFC_2228 = "rfc2228";
+	public static final String	ARG_RFC_2428 = "rfc2428";
 	public static final String	ARG_RFC_2640 = "rfc2640";
 	public static final String	ARG_RFC_3659 = "rfc3659";
+	public static final String	ARG_RFC_ALL = "rfcAll";
 	public static final String	JMX_NAME = "chav1961.nanoftp:type=basic,name=server";
 
 	public static void main(String[] args) {
@@ -54,9 +56,10 @@ public class Application {
 			final int			ftpPort = parsed.getValue(ARG_FTP_PORT, int.class);
 			final int			ftpDataPort = parsed.getValue(ARG_FTP_DATA_PORT, int.class);
 			final String		userPass = parsed.getValue(ARG_ANON_USER, String.class);
-			final boolean		supportRFC2228 = parsed.getValue(ARG_RFC_2228, boolean.class);
-			final boolean		supportRFC2640 = parsed.getValue(ARG_RFC_2640, boolean.class);
-			final boolean		supportRFC3659 = parsed.getValue(ARG_RFC_3659, boolean.class);
+			final boolean		supportRFC2228 = parsed.getValue(ARG_RFC_2228, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
+			final boolean		supportRFC2428 = parsed.getValue(ARG_RFC_2428, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
+			final boolean		supportRFC2640 = parsed.getValue(ARG_RFC_2640, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
+			final boolean		supportRFC3659 = parsed.getValue(ARG_RFC_3659, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
 			final boolean		needDebug = parsed.getValue(ARG_DEBUG_TRACE, boolean.class);
 			final ObjectName 	jmxName = new ObjectName(JMX_NAME);
 			
@@ -92,7 +95,7 @@ public class Application {
 			}
 			else {
 				
-				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, supportRFC2228, supportRFC2640, supportRFC3659, needDebug)) {
+				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, supportRFC2228, supportRFC2428, supportRFC2640, supportRFC3659, needDebug)) {
 					final MBeanServer 	mBeanServer = ManagementFactory.getPlatformMBeanServer();
 
 					Runtime.getRuntime().addShutdownHook(new Thread(()->{
@@ -174,8 +177,10 @@ public class Application {
 			new FileArg(ARG_FTP_ROOT, true, false, "Root directory for FTP server users"),
 			new BooleanArg(ARG_JMX_ENABLE, false, "Turn on JMX to control the service", false),
 			new BooleanArg(ARG_RFC_2228, false, "Turn on RFC-2228 support on the service", false),
+			new BooleanArg(ARG_RFC_2428, false, "Turn on RFC-2428 support on the service", false),
 			new BooleanArg(ARG_RFC_2640, false, "Turn on RFC-2640 support on the service", false),
 			new BooleanArg(ARG_RFC_3659, false, "Turn on RFC-3659 support on the service", false),
+			new BooleanArg(ARG_RFC_ALL, false, "Turn on all RFC-NNNN support on the service", false),
 			new BooleanArg(ARG_DEBUG_TRACE, false, "Turn on debug trace on stderr", false)
 		};
 		
