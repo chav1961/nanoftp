@@ -5,6 +5,7 @@ import java.io.File;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.util.EnumSet;
 
 import javax.management.InstanceAlreadyExistsException;
 import javax.management.InstanceNotFoundException;
@@ -23,6 +24,7 @@ import com.sun.tools.attach.AttachNotSupportedException;
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 
+import chav1961.nanoftp.internal.Commands;
 import chav1961.nanoftp.internal.FTPServer;
 import chav1961.nanoftp.internal.ModeList;
 import chav1961.nanoftp.jmx.JmxManager;
@@ -45,6 +47,7 @@ public class Application {
 	public static final String	ARG_RFC_2640 = "rfc2640";
 	public static final String	ARG_RFC_3659 = "rfc3659";
 	public static final String	ARG_RFC_ALL = "rfcAll";
+	public static final String	ARG_IGNORE = "ignore";
 	public static final String	JMX_NAME = "chav1961.nanoftp:type=basic,name=server";
 
 	public static void main(String[] args) {
@@ -60,6 +63,7 @@ public class Application {
 			final boolean		supportRFC2428 = parsed.getValue(ARG_RFC_2428, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
 			final boolean		supportRFC2640 = parsed.getValue(ARG_RFC_2640, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
 			final boolean		supportRFC3659 = parsed.getValue(ARG_RFC_3659, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
+			final EnumSet<Commands>	blackList = buildBlackList(parsed.getValue(ARG_IGNORE, String.class));
 			final boolean		needDebug = parsed.getValue(ARG_DEBUG_TRACE, boolean.class);
 			final ObjectName 	jmxName = new ObjectName(JMX_NAME);
 			
@@ -94,8 +98,7 @@ public class Application {
 				print("Command completed");
 			}
 			else {
-				
-				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, supportRFC2228, supportRFC2428, supportRFC2640, supportRFC3659, needDebug)) {
+				try(final FTPServer		server = new FTPServer(ftpPort, ftpDataPort, root, userPass, supportRFC2228, supportRFC2428, supportRFC2640, supportRFC3659, blackList, needDebug)) {
 					final MBeanServer 	mBeanServer = ManagementFactory.getPlatformMBeanServer();
 
 					Runtime.getRuntime().addShutdownHook(new Thread(()->{
@@ -142,6 +145,15 @@ public class Application {
 		}
 	}
 
+	private static EnumSet<Commands> buildBlackList(final String list) {
+		final EnumSet<Commands>	result = EnumSet.noneOf(Commands.class);
+		
+		for (String item : list.toUpperCase().split(",")) {
+			result.add(Commands.valueOf(item));
+		}
+		return result;
+	}
+
 	private static VirtualMachine getVM() throws AttachNotSupportedException, IOException {
 		final String	name = Application.class.getProtectionDomain().getCodeSource().getLocation().toString();
 		final String	tail = name.substring(name.lastIndexOf('/')+1);
@@ -181,6 +193,7 @@ public class Application {
 			new BooleanArg(ARG_RFC_2640, false, "Turn on RFC-2640 support on the service", false),
 			new BooleanArg(ARG_RFC_3659, false, "Turn on RFC-3659 support on the service", false),
 			new BooleanArg(ARG_RFC_ALL, false, "Turn on all RFC-NNNN support on the service", false),
+			new StringArg(ARG_IGNORE, false, "Return '500' response for the FTP commands typed", ""),
 			new BooleanArg(ARG_DEBUG_TRACE, false, "Turn on debug trace on stderr", false)
 		};
 		
@@ -212,6 +225,16 @@ public class Application {
 				}
 				if (parser.getValue(ARG_FTP_PORT, int.class).equals(parser.getValue(ARG_FTP_DATA_PORT, int.class))) {
 					return "FTP port ["+parser.getValue(ARG_FTP_PORT, int.class)+"] and FTP data port ["+parser.getValue(ARG_FTP_DATA_PORT, int.class)+"] must be different";
+				}
+
+				if (parser.isTyped(ARG_IGNORE)) {
+					for (String item : parser.getValue(ARG_IGNORE, String.class).toUpperCase().split(",")) {
+						try {
+							Commands.valueOf(item.trim());
+						} catch (IllegalArgumentException exc) {
+							return "Unknown FTP command ["+item+"] in the ignore list";
+						}
+					}
 				}
 				
 				return null;

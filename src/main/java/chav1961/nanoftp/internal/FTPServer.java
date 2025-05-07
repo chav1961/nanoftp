@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.URI;
+import java.util.EnumSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -34,11 +35,12 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 	private final boolean 			supportRFC2428;
 	private final boolean 			supportRFC2640;
 	private final boolean 			supportRFC3659;
+	private final EnumSet<Commands>	blackList;
 	private final boolean			needDebug;
 	private volatile boolean		isStarted = false;
 	private volatile boolean		isSuspended = false;
 	
-	public FTPServer(final int serverPort, final int dataPort, final File root, final String userPass, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final boolean needDebug) throws IOException {
+	public FTPServer(final int serverPort, final int dataPort, final File root, final String userPass, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final EnumSet<Commands> blackList, final boolean needDebug) throws IOException {
 		if (serverPort < 0 || serverPort > Character.MAX_VALUE) {
 			throw new IllegalArgumentException("Server port ["+serverPort+"] out of range 0.."+(int)Character.MAX_VALUE);
 		}
@@ -47,6 +49,9 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 		}
 		else if (root == null || !root.exists() || !root.isDirectory() || !root.canRead()) {
 			throw new IllegalArgumentException("Root file ["+root+"] is null, not exists, not a directory or not accessible for you");
+		}
+		else if (blackList == null) {
+			throw new NullPointerException("Black list can't be null");
 		}
 		else {
 			this.ss = new ServerSocket(serverPort);
@@ -59,6 +64,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 		    this.supportRFC2428 = supportRFC2428;
 		    this.supportRFC2640 = supportRFC2640;
 		    this.supportRFC3659 = supportRFC3659;
+		    this.blackList = blackList;
 			this.needDebug = needDebug;
 		}
 	}
@@ -75,7 +81,7 @@ public class FTPServer implements Runnable, ExecutionControl, LoggerFacadeOwner,
 				final Socket		sock = ss.accept();
 				
 				if (isStarted() && !isSuspended()) {
-					final FTPSession 	w = new FTPSession(sock, dataPort, exec, logger, root, validator, supportRFC2228, supportRFC2428, supportRFC2640, supportRFC3659, needDebug);
+					final FTPSession 	w = new FTPSession(sock, dataPort, exec, logger, root, validator, supportRFC2228, supportRFC2428, supportRFC2640, supportRFC3659, blackList,  needDebug);
 					final Thread		t = new Thread(w);
 		
 					t.setDaemon(true);

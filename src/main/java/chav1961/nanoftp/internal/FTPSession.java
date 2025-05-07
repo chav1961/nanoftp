@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.Calendar;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
@@ -38,128 +39,11 @@ import chav1961.purelib.basic.interfaces.ProgressIndicator;
 class FTPSession implements Runnable, LoggerFacadeOwner {
 	private static final File[]	EMPTY_FILE_ARRAY = new File[0];
 
-	private static enum LoggingStatus {
+	static enum LoggingStatus {
 		NOTLOGGEDIN,
 		USERNAMEENTERED,
 		LOGGEDIN
 	}
-	
-	private static enum Commands {
-		USER(false, false, false, false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
-		PASS(false, false, false, false, false, LoggingStatus.USERNAMEENTERED, "<Password>", "Type password to logon"),
-		ACCT(false, false, false, false, false, null, "<Info>", "Account information"),
-		CWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
-		XCWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Change working directory"),
-		CDUP(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Change current directory to it's parent"),
-		SMNT(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<PathName>", "Mount file system to current session"),
-  		QUIT(true, false, false, false, false, null, "", "Close connection and quit"),
-		REIN(false, false, false, false, false, null, "", "Reset and reinitialize connection"),
-		PORT(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<ip0>,<ip1>,<ip2>,<ip3>,<portHi>,<portLo>}", "Enter active mode"),
-		PASV(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode"),
-  		TYPE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "{{A|E} [{N|T|A}] | I | L <byteSize>}", "Set transmission content type"),
-		STRU(false, false, false, false, false, LoggingStatus.LOGGEDIN, "{F|R|P}", "Define structiure of the file to transfer"),
-  		MODE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "{S|B|C}", "Set transmission mode"),
-  		RETR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Read>", "Read file content"),
-  		STOR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content"),
-  		STOU(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Write>", "Write file content with typed or unique name"), // *
-  		APPE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Append>", "Append file content"),
-  		ALLO(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Space> [R <Space>]", "Try to allocate space for file to store"),
-  		REST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Marker>", "Restore transfer to typed marker"),
-  		RNFR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Rename>", "Begin to rename file"),
-  		RNTO(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<RenamedFileName>", "End to rename file"),
-  		ABOR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Cancel file transfer"),
-  		DELE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Remove>", "Remove file typed"),
-  		RMD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
-  		XRMD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
-  		MKD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
-		XMKD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<NewDirectory>", "Create new directory on the server"),
-		PWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
-  		XPWD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Print current working directory name"),
-		LIST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List current or typed directory content in Unix 'ls' format"),
-  		NLST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "[<Directory>]", "List names from current or typed directory"),
-  		SITE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Command> [<parameters>]", "Execute command in the server"),
-		SYST(false, false, false, false, false, null, "", "Print OS name"),
-  		STAT(false, false, false, false, false, null, "[<File>]", "Get status of the server, transmission or file/directory"),
-  		HELP(false, false, false, false, false, null, "[<CommandAbbr>]", "Print either command list or typed command description"),
-		NOOP(false, false, false, false, false, null, "", "No operation. Usually used as 'ping'"),
-		AUTH(false, true, false, false, false, null, "<base64-content>", "Authentication/security mechanism"),
-		ADAT(false, true, false, false, false, null, "<base64-content>", "Authentication/security data"),
-		PROT(false, true, false, false, false, null, "<base64-content>", "Channel protection level"),
-		PBSZ(false, true, false, false, false, null, "<base64-content>", "Protection buffer size"),
-		CCC(false, true, false, false, false, null, "<base64-content>", "Clear command channel"),
-		XCCC(false, true, false, false, false, null, "<base64-content>", "Clear command channel"),
-		MIC(false, true, false, false, false, null, "<base64-content>", "Integrity protection command"),
-		XMIC(false, true, false, false, false, null, "<base64-content>", "Integrity protection command"),
-		CONF(false, true, false, false, false, null, "<base64-content>", "Confidentiality protection command"),
-		ENC(false, true, false, false, false, null, "<base64-content>", "Privacy protection command"),
-		XENC(false, true, false, false, false, null, "<base64-content>", "Privacy protection command"),
-		FEAT(false, false, false, false, false, null, "", "Get list of features for the given FTP server"),
-  		EPSV(false, false, true, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
-  		EPRT(false, false, true, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
-		LANG(false, false, false, true, false, null, "<base64-content>", "Language settings"),
-		MDTM(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-		TVFS(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-		MLST(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-		MLSD(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-  		SIZE(false, false, false, false, true, LoggingStatus.LOGGEDIN, "", ""),
-  		;
-		
-		private final boolean		exitRequred;
-		private final boolean		isRFC2228;
-		private final boolean		isRFC2428;
-		private final boolean		isRFC2640;
-		private final boolean		isRFC3659;
-		private final LoggingStatus	context;
-		private final String		args;
-		private final String		descriptor;
-		
-		private Commands(final boolean exitRequired, final boolean isRFC2228, final boolean isRFC2428, final boolean isRFC2640, final boolean isRFC3659, final LoggingStatus context, final String args, final String descriptor) {
-			this.exitRequred = exitRequired;
-			this.isRFC2228 = isRFC2228;
-			this.isRFC2428 = isRFC2428;
-			this.isRFC2640 = isRFC2640;
-			this.isRFC3659 = isRFC3659;
-			this.context = context;
-			this.args = args;
-			this.descriptor = descriptor;
-		}
-
-		public boolean isExitRequired() {
-			return exitRequred;
-		}
-
-		public boolean isRFC2228() {
-			return isRFC2228;
-		}
-		
-		public boolean isRFC2428() {
-			return isRFC2428;
-		}
-		
-		public boolean isRFC2640() {
-			return isRFC2640;
-		}
-		
-		public boolean isRFC3659() {
-			return isRFC3659;
-		}
-		
-		public boolean isFeature() {
-			return isRFC2228 || isRFC2640 || isRFC3659;
-		}
-		
-		public LoggingStatus getContext() {
-			return context;
-		}
-		
-		public String getArgs() {
-			return args;
-		}
-		
-		public String getDescriptor() {
-			return descriptor;
-		}
-	}	
 	
 	private static enum ConnectionMode {
 		ACTIVE,
@@ -188,6 +72,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private final boolean 			supportRFC2428;
 	private final boolean 			supportRFC2640;
 	private final boolean 			supportRFC3659;
+	private final EnumSet<Commands>	blackList;
 	private final boolean 			debugMode;
 	private final SimpleValidator	validator;
 
@@ -200,7 +85,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private DataCopier			copier = null;
 	private Future<?>			future = null;
   
-	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final boolean debugMode) {
+	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final EnumSet<Commands> blackList, final boolean debugMode) {
 	    this.controlSocket = client;
 	    this.dataPort = dataPort;
 	    this.service = service;
@@ -210,6 +95,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	    this.supportRFC2428 = supportRFC2428;
 	    this.supportRFC2640 = supportRFC2640;
 	    this.supportRFC3659 = supportRFC3659;
+	    this.blackList = blackList;
 	    this.debugMode = debugMode;
 	    this.root = root;
 	    clearSettings();
@@ -263,6 +149,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			}
 			else if(cmd.isRFC2228() && !supportRFC2228 || cmd.isRFC2428() && !supportRFC2428 || cmd.isRFC2640() && !supportRFC2640 || cmd.isRFC3659() && !supportRFC3659) {
 				sendAnswer(MessageType.MSG_UNSUPPORTED_COMMAND);
+				return true;
+			}
+			else if(blackList.contains(cmd)) {
+				sendAnswer(MessageType.MSG_IGNORED_COMMAND);
 				return true;
 			}
 			else {
@@ -406,9 +296,13 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 							break;
 						case MDTM:	// TODO:
 						case TVFS:	// TODO:
-						case MLST:	// TODO:
-						case MLSD:	// TODO:
 					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
+						case MLST:
+							handleMlst(args.isEmpty() ? currDirectory : args);
+							break;
+						case MLSD:
+							handleMlsd(args.isEmpty() ? currDirectory : args);
+							break;
 						default:
 					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
 					}
@@ -612,7 +506,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 	private void handleEpsv() throws IOException {
 		final SocketAddress	addr = openDataConnectionPassive(dataPort);
-		final int	 port = ((InetSocketAddress)addr).getPort();
+		final int		port = ((InetSocketAddress)addr).getPort();
 	  
 		sendAnswer(MessageType.MSG_ENTERING_EXTENDED_PASSIVE_MODE, port);
 		waitDataConnectionPassive(port);
@@ -700,6 +594,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private void handleType(final String mode) throws IOException {
 		try {
 			transferMode = RepresentationTypeDescriptor.valueOf(mode).type;
+			sendAnswer(MessageType.MSG_COMMAND_OK);
 		} catch (CommandParserException e) {
 			sendAnswer(e.getMessageType(), e.getParameters());
 		}
@@ -901,6 +796,47 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private void handleSmnt() throws IOException {
 		sendAnswer(MessageType.MSG_COMMAND_IGNORED);
 	}  
+
+	private void handleMlst(final String fileName) throws IOException {
+		final File		current = new File(root, fileName).getAbsoluteFile();
+		
+		if (!current.exists()) {
+			sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS, getFileName(current));
+		}
+		else {
+			sendAnswer(MessageType.MSG_FILE_DESC_BEGIN);
+			sendCommandLine(" "+new MLSDResponse(current).getDescriptor());
+			sendAnswer(MessageType.MSG_FILE_DESC_END);
+			closeDataConnection();
+		}
+	}
+	
+	private void handleMlsd(final String dirName) throws IOException {
+		if (!conn.isConnectionValid()) {
+			sendAnswer(MessageType.MSG_NO_DATA_CONNECTION);
+		} 
+		else {
+			final File		current = new File(root, dirName).getAbsoluteFile();
+			
+			if (!current.exists()) {
+				sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS, getFileName(current));
+			}
+			else {
+				final File[] 	dirContent = getDirContent(current);
+
+				sendAnswer(MessageType.MSG_OPEN_BINARY_CONN_FOR_LIST);
+				sendDataLine("type=cdir; .");
+				sendDataLine("type=pdir; ..");
+				if (dirContent != null) {
+					for (File content : dirContent) {
+						sendDataLine(new MLSDResponse(content).getDescriptor());
+					}
+				}
+				sendAnswer(MessageType.MSG_TRANSFER_COMPLETED);
+				closeDataConnection();
+			}
+		}
+	}
 	
 	private void handleSize(final String file) throws IOException {
 		final File	f = getFileDesc(file);
@@ -1466,5 +1402,56 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			setName("Data copier ["+unique+"] for "+file.getName());
 			setDaemon(true);
 		}
+	}
+	
+	
+	private static class MLSDResponse {
+		private static final String	FACT_SIZE = "size";
+		private static final String	FACT_MODIFY = "modify";
+		private static final String	FACT_TYPE = "type";
+		private static final String	FACT_UNIQUE = "unique";
+		private static final String	FACT_PERM = "perm";
+		private static final String	FACT_LANG = "lang";
+		
+		private final File		file;
+		
+		private MLSDResponse(final File file) {
+			this.file = file;
+		}
+
+		public String getDescriptor() {
+			final StringBuilder	sb = new StringBuilder();
+			
+			sb.append(FACT_TYPE).append('=').append(file.isDirectory() ? "dir" : "file").append(';');
+			sb.append(FACT_MODIFY).append('=').append(InternalUtils.milliseconds2Time(file.lastModified())).append(';');
+			sb.append(FACT_PERM).append('=').append(calcPermissions(file)).append(';');
+			sb.append(FACT_LANG).append('=').append(Locale.getDefault().getLanguage()).append(';');
+			sb.append(FACT_SIZE).append('=').append(file.length()).append(';');
+//			sb.append(FACT_UNIQUE).append('=').append(file.getName()).append(';');
+			sb.append(' ').append(file.getName());
+			return sb.toString();
+		}
+
+		private String calcPermissions(final File file) {
+			final StringBuilder	sb = new StringBuilder();
+			
+			if (file.isDirectory()) {
+				sb.append('e');
+				if (file.canWrite()) {
+					sb.append('c').append('f').append('l').append('m').append('p');
+					if (file.listFiles() == null) {
+						sb.append('d');
+					}
+				}
+			}
+			else {
+				sb.append('r');
+				if (file.canWrite()) {
+					sb.append('a').append('d').append('w');
+				}
+			}
+			return sb.toString();
+		}
+		
 	}
 }
