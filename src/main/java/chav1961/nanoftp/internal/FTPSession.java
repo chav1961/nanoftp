@@ -38,6 +38,7 @@ import chav1961.purelib.basic.interfaces.ProgressIndicator;
 
 class FTPSession implements Runnable, LoggerFacadeOwner {
 	private static final File[]	EMPTY_FILE_ARRAY = new File[0];
+	private static final String	EOL = "\r\n";
 
 	static enum LoggingStatus {
 		NOTLOGGEDIN,
@@ -84,6 +85,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private File				oldFile;
 	private DataCopier			copier = null;
 	private Future<?>			future = null;
+	private boolean				ignoreEPSV = false;
   
 	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final EnumSet<Commands> blackList, final boolean debugMode) {
 	    this.controlSocket = client;
@@ -143,16 +145,16 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			final Commands	cmd = Commands.valueOf(command.trim().toUpperCase());
 
 			debug("Command: " + cmd + ", args: <" + (cmd == Commands.PASS ? "***" : args) + ">");
-			if (cmd.getContext() != null && cmd.getContext() != currentLoggingStatus) {
-				sendAnswer(MessageType.MSG_USER_NOT_LOGGED);
-				return true;
-			}
-			else if(cmd.isRFC2228() && !supportRFC2228 || cmd.isRFC2428() && !supportRFC2428 || cmd.isRFC2640() && !supportRFC2640 || cmd.isRFC3659() && !supportRFC3659) {
+			if(cmd.isFeature() && !isFeatureSupported(cmd)) {
 				sendAnswer(MessageType.MSG_UNSUPPORTED_COMMAND);
 				return true;
 			}
 			else if(blackList.contains(cmd)) {
 				sendAnswer(MessageType.MSG_IGNORED_COMMAND);
+				return true;
+			}
+			else if (cmd.getContext() != null && cmd.getContext() != currentLoggingStatus) {
+				sendAnswer(MessageType.MSG_USER_NOT_LOGGED);
 				return true;
 			}
 			else {
@@ -186,10 +188,20 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 							break;
 						// Chapter 4.1.2 RFC-959.
 						case PORT:
-					  		handlePort(args);
+							if (ignoreEPSV) {
+								sendAnswer(MessageType.MSG_IGNORED_COMMAND_BY_EPSV);
+							}
+							else {
+								handlePort(args);
+							}
 							break;
 						case PASV:
-					  		handlePasv();
+							if (ignoreEPSV) {
+								sendAnswer(MessageType.MSG_IGNORED_COMMAND_BY_EPSV);
+							}
+							else {
+								handlePasv();
+							}
 							break;
 						case TYPE:
 					  		handleType(args.toUpperCase());
@@ -282,10 +294,21 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
 						// RFC-2428.
 						case EPRT:
-					  		handleEPort(args);
+							if (ignoreEPSV) {
+								sendAnswer(MessageType.MSG_IGNORED_COMMAND_BY_EPSV);
+							}
+							else {
+						  		handleEPort(args);
+							}
 							break;
 						case EPSV:
-					  		handleEpsv();
+							if ("ALL".equals(args)) {
+								ignoreEPSV = true;
+								sendAnswer(MessageType.MSG_COMMAND_OK);
+							}
+							else {
+						  		handleEpsv();
+							}
 							break;
 						// RFC-2640.
 						case LANG:	// TODO:							
@@ -320,6 +343,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			sendAnswer(MessageType.MSG_UNKNOWN_COMMAND);
 			return true;
 		}
+	}
+
+	private boolean isFeatureSupported(final Commands cmd) {
+		return cmd.isRFC2228() && supportRFC2228 || cmd.isRFC2428() && supportRFC2428 || cmd.isRFC2640() && supportRFC2640 || cmd.isRFC3659() && supportRFC3659;
 	}
 
 	private void handleRein() throws IOException {
@@ -523,8 +550,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private void handleFeat() throws IOException {
 		sendAnswer(MessageType.MSG_EXTENSIONS_START);
 		for(Commands item : Commands.values()) {
-			if (item.isFeature()) {
-				sendCommandLine(' ' + item.name() + '\r' + '\n');
+			if (item.isFeature() && !blackList.contains(item)) {
+				sendCommandLine(' ' + item.getFeatureString() + EOL);
 			}
 		}
 		sendAnswer(MessageType.MSG_EXTENSIONS_END);
@@ -762,10 +789,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			sendAnswer(MessageType.MSG_COMMANDS_START);
 			for(Commands item : Commands.values()) {
 				if (!item.isFeature()) {
-					sendCommandLine(' ' + item.name() + ' ' + item.getArgs() + '\r' + '\n');
+					sendCommandLine(' ' + item.name() + ' ' + item.getArgs() + EOL);
 				}
 				else {
-					sendCommandLine(' ' + item.name() + ' ' + item.getArgs() + " (feature)\r\n");
+					sendCommandLine(' ' + item.name() + ' ' + item.getArgs() + " (feature)" + EOL);
 				}
 			}
 			sendAnswer(MessageType.MSG_COMMANDS_END);
@@ -805,9 +832,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		}
 		else {
 			sendAnswer(MessageType.MSG_FILE_DESC_BEGIN);
-			sendCommandLine(" "+new MLSDResponse(current).getDescriptor());
+			sendCommandLine(" "+new MLSDResponse(current).getDescriptor() + EOL);
 			sendAnswer(MessageType.MSG_FILE_DESC_END);
-			closeDataConnection();
 		}
 	}
 	
@@ -884,8 +910,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
         
 			debug("Data: "+msg);
 			wr.write(msg);
-			wr.write('\r');
-			wr.write('\n');
+			wr.write(EOL);
 		}
 	}
 
@@ -1331,7 +1356,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			  	case OP_RETR_BIN	:
 			  		start("", file.length());
 			  		try(final InputStream	from = new FileInputStream(file)) {
-			  			Utils.copyStream(from, os, this);
+			  			
+			  			processed = Utils.copyStream(from, os, this);
 					} catch (IOException e) {
 						error = true;
 					}
@@ -1341,7 +1367,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			  		start("", file.length());
 			  		try(final InputStream	from = new FileInputStream(file);
 			  			final Reader		fromR = new InputStreamReader(from)) {
-			  			Utils.copyStream(fromR, wr, this);
+			  			
+			  			processed = Utils.copyStream(fromR, wr, this);
 					} catch (IOException e) {
 						error = true;
 					}
@@ -1350,7 +1377,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			  	case OP_STOR_BIN	:
 			  		start("");
 			  		try(final OutputStream	to = new FileOutputStream(file, append)) {
-			  			Utils.copyStream(is, to, this);
+			  			
+			  			processed = Utils.copyStream(is, to, this);
 					} catch (IOException e) {
 						error = true;
 			  		}
@@ -1360,7 +1388,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			  		start("");
 			  		try(final OutputStream	to = new FileOutputStream(file, append);
 			  			final Writer		toW = new OutputStreamWriter(to)) {
-			  			Utils.copyStream(rdr, toW, this);
+			  			
+			  			processed = Utils.copyStream(rdr, toW, this);
 					} catch (IOException e) {
 						error = true;
 			  		}

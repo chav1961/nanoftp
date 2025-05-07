@@ -30,6 +30,7 @@ import chav1961.nanoftp.internal.ModeList;
 import chav1961.nanoftp.jmx.JmxManager;
 import chav1961.nanoftp.jmx.JmxManagerMBean;
 import chav1961.purelib.basic.ArgParser;
+import chav1961.purelib.basic.Utils;
 import chav1961.purelib.basic.exceptions.CommandLineParametersException;
 import chav1961.purelib.basic.interfaces.LoggerFacade.Severity;
 
@@ -63,7 +64,7 @@ public class Application {
 			final boolean		supportRFC2428 = parsed.getValue(ARG_RFC_2428, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
 			final boolean		supportRFC2640 = parsed.getValue(ARG_RFC_2640, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
 			final boolean		supportRFC3659 = parsed.getValue(ARG_RFC_3659, boolean.class) || parsed.getValue(ARG_RFC_ALL, boolean.class);
-			final EnumSet<Commands>	blackList = buildBlackList(parsed.getValue(ARG_IGNORE, String.class));
+			final EnumSet<Commands>	blackList = buildBlackList(parsed.isTyped(ARG_IGNORE) ? parsed.getValue(ARG_IGNORE, String.class) : "");
 			final boolean		needDebug = parsed.getValue(ARG_DEBUG_TRACE, boolean.class);
 			final ObjectName 	jmxName = new ObjectName(JMX_NAME);
 			
@@ -149,7 +150,9 @@ public class Application {
 		final EnumSet<Commands>	result = EnumSet.noneOf(Commands.class);
 		
 		for (String item : list.toUpperCase().split(",")) {
-			result.add(Commands.valueOf(item));
+			if (!Utils.checkEmptyOrNullString(item)) {
+				result.add(Commands.valueOf(item));
+			}
 		}
 		return result;
 	}

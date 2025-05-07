@@ -1,6 +1,11 @@
 package chav1961.nanoftp.internal;
 
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
 import chav1961.nanoftp.internal.FTPSession.LoggingStatus;
+import chav1961.purelib.basic.Utils;
 
 public enum Commands {
 	USER(false, false, false, false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
@@ -54,12 +59,12 @@ public enum Commands {
 	FEAT(false, false, false, false, false, null, "", "Get list of features for the given FTP server"),
 	EPSV(false, false, true, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
 	EPRT(false, false, true, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
-	LANG(false, false, false, true, false, null, "<base64-content>", "Language settings"),
-	MDTM(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-	TVFS(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-	MLST(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-	MLSD(false, false, false, false, true, null, "<base64-content>", "File modification time"),
-	SIZE(false, false, false, false, true, LoggingStatus.LOGGEDIN, "", ""),
+	LANG(false, false, false, true, false, LoggingStatus.LOGGEDIN, "<base64-content>", "Language settings", getLangSettings()),
+	MDTM(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Get file modification time"),
+	TVFS(false, false, false, false, true, LoggingStatus.LOGGEDIN, "<base64-content>", "File modification time"),
+	MLST(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Describe file properties"),
+	MLSD(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<Dir>]", "Describe directory properties"),
+	SIZE(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Get file size"),
 	;
 	
 	private final boolean		exitRequred;
@@ -70,8 +75,21 @@ public enum Commands {
 	private final LoggingStatus	context;
 	private final String		args;
 	private final String		descriptor;
+	private final String		featureString;
 	
 	private Commands(final boolean exitRequired, final boolean isRFC2228, final boolean isRFC2428, final boolean isRFC2640, final boolean isRFC3659, final LoggingStatus context, final String args, final String descriptor) {
+		this(exitRequired, isRFC2228, isRFC2428, isRFC2640, isRFC3659, context, args, descriptor, null);
+	}
+	
+	static String getLangSettings() {
+		final StringBuilder	sb = new StringBuilder();
+		final String		lang = Locale.getDefault().getLanguage().toUpperCase();
+		
+		sb.append(';').append(lang).append('*');
+		return "LANG "+sb.substring(1);
+	}
+
+	private Commands(final boolean exitRequired, final boolean isRFC2228, final boolean isRFC2428, final boolean isRFC2640, final boolean isRFC3659, final LoggingStatus context, final String args, final String descriptor, final String featureString) {
 		this.exitRequred = exitRequired;
 		this.isRFC2228 = isRFC2228;
 		this.isRFC2428 = isRFC2428;
@@ -80,6 +98,7 @@ public enum Commands {
 		this.context = context;
 		this.args = args;
 		this.descriptor = descriptor;
+		this.featureString = featureString == null ? name() : featureString;
 	}
 
 	public boolean isExitRequired() {
@@ -103,18 +122,22 @@ public enum Commands {
 	}
 	
 	public boolean isFeature() {
-		return isRFC2228 || isRFC2640 || isRFC3659;
+		return isRFC2228 || isRFC2428 || isRFC2640 || isRFC3659;
 	}
 	
 	public LoggingStatus getContext() {
 		return context;
 	}
-	
+
+	public String getDescriptor() {
+		return descriptor;
+	}
+
 	public String getArgs() {
 		return args;
 	}
-	
-	public String getDescriptor() {
-		return descriptor;
+
+	public String getFeatureString() {
+		return featureString;
 	}
 }
