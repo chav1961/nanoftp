@@ -21,14 +21,18 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Function;
 
 import chav1961.purelib.basic.Utils;
 import chav1961.purelib.basic.interfaces.LoggerFacade;
@@ -43,7 +47,9 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	static enum LoggingStatus {
 		NOTLOGGEDIN,
 		USERNAMEENTERED,
-		LOGGEDIN
+		LOGGEDIN,
+		RENAMESTARTED,
+		UNKNOWN,
 	}
 	
 	private static enum ConnectionMode {
@@ -77,15 +83,17 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	private final boolean 			debugMode;
 	private final SimpleValidator	validator;
 
-	private String 				currDirectory;
+	private String 				currDirectory = "/";
 	private Writer 				controlOutWriter;
 	private TransferType 		transferMode;
 	private LoggingStatus 		currentLoggingStatus;
+	private Locale				langLocale = Locale.getDefault();
 	private String				currentUser;
 	private File				oldFile;
 	private DataCopier			copier = null;
 	private Future<?>			future = null;
 	private boolean				ignoreEPSV = false;
+	private boolean				isUTF8On = false;
   
 	FTPSession(final Socket client, final int dataPort, final ExecutorService service, final LoggerFacade logger, final File root, final SimpleValidator validator, final boolean supportRFC2228, final boolean supportRFC2428, final boolean supportRFC2640, final boolean supportRFC3659, final EnumSet<Commands> blackList, final boolean debugMode) {
 	    this.controlSocket = client;
@@ -112,8 +120,9 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	public void run() {
 		debug("FTP session started, remote address is ["+controlSocket.getRemoteSocketAddress()+"], current working directory is <" + this.currDirectory + ">");
 
-		try(final Socket	s = 	controlSocket;
-			final BufferedReader	controlIn = new BufferedReader(new InputStreamReader(s.getInputStream()));
+		try(final Socket	s = controlSocket;
+			final Reader	rdr = supportRFC2640 ? new InputStreamReader(s.getInputStream(), "UTF-8") : new InputStreamReader(s.getInputStream());
+			final BufferedReader	controlIn = new BufferedReader(rdr);
 			final Writer	controlOutWriter = new OutputStreamWriter(s.getOutputStream())) {
 			String			line;
 
@@ -177,8 +186,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 						case CDUP:
 					  		handleCwd("..");
 							break;
-						case SMNT:	// TODO:
-					  		handleSmnt();
+						case SMNT:
+					  		handleSmnt(args);
 							break;
 						case REIN:
 					  		handleRein();
@@ -206,7 +215,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 						case TYPE:
 					  		handleType(args.toUpperCase());
 							break;
-						case STRU:	// TODO:
+						case STRU:
 					  		handleStru(args.toUpperCase());
 							break;
 						case MODE:
@@ -277,7 +286,20 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 					  		handleNoop();
 							break;
 						case FEAT:
-					  		handleFeat();
+							if (hasAnyFeaturesOn()) {
+						  		handleFeat();
+							}
+							else {
+								sendAnswer(MessageType.MSG_UNKNOWN_COMMAND);
+							}
+							break;
+						case OPTS:
+							if (hasAnyFeaturesOn()) {
+								handleOpts(args);
+							}
+							else {
+								sendAnswer(MessageType.MSG_UNKNOWN_COMMAND);
+							}
 							break;
 						// RFC-2228.
 						case AUTH:	// TODO:
@@ -311,8 +333,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 							}
 							break;
 						// RFC-2640.
-						case LANG:	// TODO:							
-					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
+						case LANG:
+							handleLang(args);
 						// RFC-3659.
 						case SIZE:
 					  		handleSize(args);
@@ -329,17 +351,17 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 						default:
 					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
 					}
-					if (cmd != Commands.RNFR) {
-						oldFile = null;
-					}
 					return !cmd.isExitRequired();
+				} catch (CommandParserException exc) {
+					sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, exc.getLocalizedMessage());
+					return true;
 				} catch (IllegalArgumentException exc) {
-					sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT);
+					sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, exc.getLocalizedMessage());
 					return true;
 				}
 			}
 		} catch (IllegalArgumentException exc) {
-			debug("Wrong command: " + command);
+			debug("Wrong command: " + c);
 			sendAnswer(MessageType.MSG_UNKNOWN_COMMAND);
 			return true;
 		}
@@ -349,20 +371,37 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		return cmd.isRFC2228() && supportRFC2228 || cmd.isRFC2428() && supportRFC2428 || cmd.isRFC2640() && supportRFC2640 || cmd.isRFC3659() && supportRFC3659;
 	}
 
+	private boolean hasAnyFeaturesOn() {
+		return supportRFC2228 || supportRFC2428 || supportRFC2640 || supportRFC3659;
+	}
+	
 	private void handleRein() throws IOException {
 		clearSettings();
 		sendAnswer(MessageType.MSG_CONNECTION_RESET);
 	}  
 
+	private void handleLang(final String langTag) throws IOException, CommandParserException {
+		if (Utils.checkEmptyOrNullString(langTag)) {
+			langLocale = Locale.getDefault();
+		}
+		else {
+			try {
+				langLocale = Locale.forLanguageTag(langTag);
+			} catch (IllegalArgumentException exc) {
+				throw new CommandParserException(MessageType.MSG_ILLEGAL_ARGUMENT, langTag);
+			}
+		}
+		sendAnswer(MessageType.MSG_COMMAND_OK);
+	}
+	
 	private void handleUser(final String userName) throws IOException {
 		if (Utils.checkEmptyOrNullString(userName)) {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, userName);
+			throw new IllegalArgumentException("User name string can't be null or empty");
 		}
 		else {
 			switch (currentLoggingStatus) {
 				case LOGGEDIN		:
-					sendAnswer(MessageType.MSG_USER_ALREADY_LOGGED);
-					break;
+					handleRein();
 				case USERNAMEENTERED:
 				case NOTLOGGEDIN	:
 					if (validator.isUserExists(userName)) {
@@ -381,7 +420,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 	private void handlePass(final String password) throws IOException {
 		if (Utils.checkEmptyOrNullString(password)) {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, password);
+			throw new IllegalArgumentException("Password string can't be null or empty");
 		}
 		else {
 			switch (currentLoggingStatus) {
@@ -410,8 +449,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 
 	private void handleCwd(final String args) throws IOException {
-		final File	current = getFileDesc(args);
-	  
+		final File	current = getFileDesc(args.replace(File.separatorChar, '/'));
+
 		if (current.exists() && current.isDirectory()) {
 			currDirectory = getFileName(current);
 			sendAnswer(MessageType.MSG_DIRECTORY_CHANGED, currDirectory);
@@ -488,21 +527,25 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 
 	private void handlePwd() throws IOException {
-		sendAnswer(MessageType.MSG_CURRENT_DIR, getFileName(getFileDesc(currDirectory)));
+		sendAnswer(MessageType.MSG_CURRENT_DIR, currDirectory);
 	}
 
 	private void handlePort(final String args) throws IOException {
-		// args ip,ip,ip,ip,port/256,port%256
+		// args: ip1,ip2,ip3,ip4,port/256,port%256
 		if (args.matches("\\d{1,3},\\d{1,3},\\d{1,3},\\d{1,3},\\d{1,3},\\d{1,3}")) {
 			final String[] 	content = args.split(",");
 			final String 	hostName = content[0].trim() + '.' + content[1].trim() + '.' + content[2].trim() + '.' + content[3].trim();
 			final int 		port = Integer.parseInt(content[4].trim()) * 256 + Integer.parseInt(content[5].trim());
 		
-			openDataConnectionActive(hostName, port);
-			sendAnswer(MessageType.MSG_COMMAND_OK);
+			if (openDataConnectionActive(hostName, port)) {
+				sendAnswer(MessageType.MSG_COMMAND_OK);
+			}
+			else {
+				sendAnswer(MessageType.MSG_PORT_CONNECTION_FAILURE, hostName, port);
+			}
 		}
 		else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, args);
+			throw new IllegalArgumentException(args);
 		}
 	}
 
@@ -515,20 +558,26 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			sendAnswer(MessageType.MSG_COMMAND_OK);
 		}
 		else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, args);
+			throw new IllegalArgumentException(args);
 		}
 	}
 
 	private void handlePasv() throws IOException {
 		final SocketAddress	addr = openDataConnectionPassive(dataPort);
-	    final String	host = ((InetSocketAddress)addr).getAddress().getHostAddress();
-	    final int		port = ((InetSocketAddress)addr).getPort();
-	    final String[]	ip = host.split("\\."); 
-	    final int 		p1 = port / 256;
-	    final int 		p2 = port % 256;
-	    
-	    sendAnswer(MessageType.MSG_ENTERING_PASSIVE_MODE, ip[0], ip[1], ip[2], ip[3], p1, p2);
-	    waitDataConnectionPassive(port);
+		
+		if (addr != null) {
+		    final String	host = ((InetSocketAddress)addr).getAddress().getHostAddress();
+		    final int		port = ((InetSocketAddress)addr).getPort();
+		    final String[]	ip = host.split("\\."); 
+		    final int 		p1 = port / 256;
+		    final int 		p2 = port % 256;
+		    
+		    sendAnswer(MessageType.MSG_ENTERING_PASSIVE_MODE, ip[0], ip[1], ip[2], ip[3], p1, p2);
+		    waitDataConnectionPassive(port);
+		}
+		else {
+		    sendAnswer(MessageType.MSG_PASV_CONNECTION_FAILURE);
+		}
 	}
 
 	private void handleEpsv() throws IOException {
@@ -548,15 +597,44 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	}
 
 	private void handleFeat() throws IOException {
-		sendAnswer(MessageType.MSG_EXTENSIONS_START);
-		for(Commands item : Commands.values()) {
-			if (item.isFeature() && !blackList.contains(item)) {
-				sendCommandLine(' ' + item.getFeatureString() + EOL);
+		sendBlock(MessageType.MSG_EXTENSIONS_START, MessageType.MSG_EXTENSIONS_END, Commands.values(), (v)->{
+			if (v.isFeature() && !blackList.contains(v)) {
+				return v.getFeatureString();
 			}
-		}
-		sendAnswer(MessageType.MSG_EXTENSIONS_END);
+			else {
+				return null;
+			}
+		});
 	}
 
+	private void handleOpts(final String args) throws IOException, CommandParserException {
+		// TODO Auto-generated method stub
+		if (Utils.checkEmptyOrNullString(args)) {
+			throw new IllegalArgumentException("'OPTS' arguments can't be null or empty");
+		}
+		else {
+			final int 		blank = args.indexOf(' ');
+			final String 	command = blank == -1 ? args : args.substring(0, blank);
+			final String 	parm = blank == -1 ? "" : args.substring(blank + 1).trim();
+			final Commands	cmd = Commands.valueOf(command.trim().toUpperCase());
+
+			switch (cmd) {
+				case UTF8:
+					if ("ON".equalsIgnoreCase(parm) || "OFF".equalsIgnoreCase(parm)) {
+						isUTF8On = "ON".equalsIgnoreCase(parm); 
+						sendAnswer(MessageType.MSG_COMMAND_OK);
+					}
+					else {
+						throw new CommandParserException(MessageType.MSG_ILLEGAL_ARGUMENT, parm);
+					}
+					break;
+				default :
+					sendAnswer(MessageType.MSG_COMMAND_IGNORED);
+					break;
+			}
+		}
+	}
+	
 	private void handleMkd(final String args) throws IOException {
 		if (isFileNameValid(args)) {
 			final File dir = getFileDesc(args);
@@ -570,7 +648,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			}
 		}
 		else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, args);
+			throw new IllegalArgumentException(args);
 		}
 	}
 
@@ -590,7 +668,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 				sendAnswer(MessageType.MSG_FAILURE_DIRECTORY_NOT_EXISTS, getFileName(d));
 			}
 		} else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, dir);
+			throw new IllegalArgumentException(dir);
 		}
 	}
 
@@ -610,7 +688,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 				sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS, getFileName(f));
 			}
 		} else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, file);
+			throw new IllegalArgumentException(file);
 		}
 	}
 
@@ -618,24 +696,26 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		sendAnswer(MessageType.MSG_COMMAND_IGNORED);
 	}
   
-	private void handleType(final String mode) throws IOException {
-		try {
-			transferMode = RepresentationTypeDescriptor.valueOf(mode).type;
-			sendAnswer(MessageType.MSG_COMMAND_OK);
-		} catch (CommandParserException e) {
-			sendAnswer(e.getMessageType(), e.getParameters());
-		}
+	private void handleType(final String mode) throws IOException, CommandParserException {
+		transferMode = RepresentationTypeDescriptor.valueOf(mode).type;
+		sendAnswer(MessageType.MSG_COMMAND_OK);
 	}
 
 	private void handleMode(final String mode) throws IOException {
 		if (Utils.checkEmptyOrNullString(mode) || !mode.matches("(S|B|C)")) {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, mode);
-		}
-		else if ("S".equals(mode)) {
-			sendAnswer(MessageType.MSG_COMMAND_OK);
+			throw new IllegalArgumentException(mode);
 		}
 		else {
-			sendAnswer(MessageType.MSG_UNSUPPORTED_ARGUMENT, mode);
+			switch(mode) {
+				case "B" : case "C" :	// TODO:
+					sendAnswer(MessageType.MSG_UNSUPPORTED_ARGUMENT, mode);
+					break;
+				case "S" :
+					sendAnswer(MessageType.MSG_COMMAND_OK);
+					break;
+				default :
+					throw new UnsupportedOperationException("Mode ["+mode+"] is not supported yet");
+			}
 		}
 	}
   
@@ -676,7 +756,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			}
 		}
 		else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, file);
+			throw new IllegalArgumentException(file);
 		}
 	}
 
@@ -696,7 +776,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	
 	private void handleAllo(final String size) throws IOException {
 		if (Utils.checkEmptyOrNullString(size) || !size.matches("\\d+(\\s+R\\s+\\d+){0,1}")) {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, size);
+			throw new IllegalArgumentException(size);
 		}
 		else {
 			sendAnswer(MessageType.MSG_COMMAND_IGNORED);
@@ -741,7 +821,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			}
 		}
 		else {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, file);
+			throw new IllegalArgumentException(file);
 		}
 	}
 
@@ -754,6 +834,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 	  
 		if (f.exists() && f.isFile()) {
 			oldFile = f;
+			currentLoggingStatus = LoggingStatus.RENAMESTARTED;
 			sendAnswer(MessageType.MSG_AWAITING_CONTINUATION);
 		}
 		else {
@@ -767,9 +848,6 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		if (f.exists()) {
 			sendAnswer(MessageType.MSG_FAILURE_FILE_ALREADY_EXISTS, getFileName(f));
 		}
-		else if (oldFile == null) {
-			sendAnswer(MessageType.MSG_MISSING_RNFR_BEFORE_RNTO);
-		}
 		else {
 			if (oldFile.renameTo(f)) {
 				sendAnswer(MessageType.MSG_COMMAND_OK);
@@ -777,6 +855,8 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			else {
 				sendAnswer(MessageType.MSG_FAILURE_FILE_UNAVAILABLE, getFileName(f));
 			}
+			currentLoggingStatus = LoggingStatus.LOGGEDIN;
+			oldFile = null;
 		}
 	}  
 
@@ -786,16 +866,14 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 	private void handleHelp(final String name) throws IOException {
 		if (Utils.checkEmptyOrNullString(name)) {
-			sendAnswer(MessageType.MSG_COMMANDS_START);
-			for(Commands item : Commands.values()) {
-				if (!item.isFeature()) {
-					sendCommandLine(' ' + item.name() + ' ' + item.getArgs() + EOL);
+			sendBlock(MessageType.MSG_COMMANDS_START, MessageType.MSG_COMMANDS_END, Commands.values(), (v)->{
+				if (!v.isFeature()) {
+					return v.name() + ' ' + v.getArgs();
 				}
 				else {
-					sendCommandLine(' ' + item.name() + ' ' + item.getArgs() + " (feature)" + EOL);
+					return v.name() + ' ' + v.getArgs() + " (feature)";
 				}
-			}
-			sendAnswer(MessageType.MSG_COMMANDS_END);
+			});
 		}
 		else {
 			try {
@@ -810,18 +888,32 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 	private void handleStru(final String parm) throws IOException {
 		if (Utils.checkEmptyOrNullString(parm) || !parm.matches("(F|R|P)")) {
-			sendAnswer(MessageType.MSG_ILLEGAL_ARGUMENT, parm);
-		}
-		else if ("F".equals(parm)) {
-			sendAnswer(MessageType.MSG_COMMAND_OK);
+			throw new IllegalArgumentException(parm);
 		}
 		else {
-			sendAnswer(MessageType.MSG_UNSUPPORTED_ARGUMENT, parm);
+			switch (parm) {
+				case "F" : 
+					sendAnswer(MessageType.MSG_COMMAND_OK);
+					break;
+				case "P" : case "R" :	// TODO:
+					sendAnswer(MessageType.MSG_UNSUPPORTED_ARGUMENT, parm);
+					break;
+				default :
+					throw new UnsupportedOperationException("Structure ["+parm+"] is not supported yet");
+			}
 		}
 	}  
 
-	private void handleSmnt() throws IOException {
-		sendAnswer(MessageType.MSG_COMMAND_IGNORED);
+	private void handleSmnt(final String fileName) throws IOException {
+		// TODO:
+		final File		current = new File(root, fileName).getAbsoluteFile();
+		
+		if (!current.exists()) {
+			sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS, getFileName(current));
+		}
+		else {
+			sendAnswer(MessageType.MSG_COMMAND_IGNORED);
+		}
 	}  
 
 	private void handleMlst(final String fileName) throws IOException {
@@ -831,9 +923,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS, getFileName(current));
 		}
 		else {
-			sendAnswer(MessageType.MSG_FILE_DESC_BEGIN);
-			sendCommandLine(" "+new MLSDResponse(current).getDescriptor() + EOL);
-			sendAnswer(MessageType.MSG_FILE_DESC_END);
+			sendBlock(MessageType.MSG_FILE_DESC_BEGIN, MessageType.MSG_FILE_DESC_END, new String[] {new MLSDResponse(current).getDescriptor()}, (v)->v);
+//			sendAnswer(MessageType.MSG_FILE_DESC_BEGIN);
+//			sendCommandLine(" "+new MLSDResponse(current).getDescriptor() + EOL);
+//			sendAnswer(MessageType.MSG_FILE_DESC_END);
 		}
 	}
 	
@@ -852,7 +945,9 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 
 				sendAnswer(MessageType.MSG_OPEN_BINARY_CONN_FOR_LIST);
 				sendDataLine("type=cdir; .");
-				sendDataLine("type=pdir; ..");
+				if (!getFileName(current).equals("/")) {
+					sendDataLine("type=pdir; ..");
+				}
 				if (dirContent != null) {
 					for (File content : dirContent) {
 						sendDataLine(new MLSDResponse(content).getDescriptor());
@@ -984,7 +1079,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		return current;
 	}
 
-	private String getFileName(final File	file) {
+	private String getFileName(final File file) {
 		final String	currentName = file.getAbsolutePath();
 		final String	rootName = root.getAbsolutePath();
 	
@@ -992,7 +1087,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			return "/";
 		}
 		else {
-			return currentName.substring(rootName.length()).replace('\\', '/');
+			return currentName.substring(rootName.length()).replace(File.separatorChar, '/');
 		}
 	}
 
@@ -1042,12 +1137,15 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		conn.waitPassive(port);
 	}
   
-	private void openDataConnectionActive(final String ipAddress, final int port) {
+	private boolean openDataConnectionActive(final String ipAddress, final int port) {
 		if (conn.mode != ConnectionMode.ACTIVE) {
 			if (conn.mode != ConnectionMode.NONE) {
 				conn.close();
 			}
-			conn.openActive(ipAddress, port);
+			return conn.openActive(ipAddress, port);
+		}
+		else {
+			return true;
 		}
 	}
 
@@ -1090,6 +1188,30 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		}
 	}
 
+	private <T> void sendBlock(final MessageType beginBlock, final MessageType endBlock, final Iterable<T> content, final Function<T,String> formatter) throws IOException {
+		sendAnswer(beginBlock);
+		for(T item : content) {
+			final String	val = formatter.apply(item);
+			
+			if (val != null) {
+				sendCommandLine(' ' + val + EOL);
+			}
+		}
+		sendAnswer(endBlock);
+	}
+
+	private <T> void sendBlock(final MessageType beginBlock, final MessageType endBlock, final T[] content, final Function<T,String> formatter) throws IOException {
+		sendAnswer(beginBlock);
+		for(T item : content) {
+			final String	val = formatter.apply(item);
+			
+			if (val != null) {
+				sendCommandLine(' ' + val + EOL);
+			}
+		}
+		sendAnswer(endBlock);
+	}
+	
 	static class RepresentationTypeDescriptor {
 		private final TransferType	type;
 		private final char	modifier;
@@ -1114,12 +1236,14 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 				switch (modes[0].charAt(0)) {
 					case 'A' :   
 						if (modes.length > 1) {
-				  			if (modes[1].charAt(0) != 'N') {
-				  				throw new CommandParserException(MessageType.MSG_UNSUPPORTED_ARGUMENT, type);
-				  			}
-				  			else {
-				  				return new RepresentationTypeDescriptor(TransferType.ASCII, '0');
-				  			}
+							switch (modes[1]) {
+								case "N" :
+					  				return new RepresentationTypeDescriptor(TransferType.ASCII, '0');
+								case "T" : case "C" : // TODO:
+					  				throw new CommandParserException(MessageType.MSG_UNSUPPORTED_ARGUMENT, type);
+								default :
+									throw new UnsupportedOperationException("'A' mode argument ["+modes[1]+"] is not suoported yet");
+							}
 						}
 						else {
 			  				return new RepresentationTypeDescriptor(TransferType.ASCII, '0');
@@ -1152,7 +1276,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		private OutputStream	os;
 		private Writer			writer;
 		
-		void openActive(final String ipAddress, final int port) {
+		boolean openActive(final String ipAddress, final int port) {
 			if (mode == ConnectionMode.NONE) {
 				try {
 					dataConnection = new Socket(ipAddress, port);
@@ -1160,8 +1284,10 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 					writer = new OutputStreamWriter(os);
 					mode = ConnectionMode.ACTIVE;
 					debug("Data connection - Active Mode - established");
+					return true;
 				} catch (IOException e) {
 					debug("Could not connect to client data socket");
+					return false;
 				}
 			}
 			else {
@@ -1438,7 +1564,6 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 		private static final String	FACT_SIZE = "size";
 		private static final String	FACT_MODIFY = "modify";
 		private static final String	FACT_TYPE = "type";
-		private static final String	FACT_UNIQUE = "unique";
 		private static final String	FACT_PERM = "perm";
 		private static final String	FACT_LANG = "lang";
 		
@@ -1456,8 +1581,7 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			sb.append(FACT_PERM).append('=').append(calcPermissions(file)).append(';');
 			sb.append(FACT_LANG).append('=').append(Locale.getDefault().getLanguage()).append(';');
 			sb.append(FACT_SIZE).append('=').append(file.length()).append(';');
-//			sb.append(FACT_UNIQUE).append('=').append(file.getName()).append(';');
-			sb.append(' ').append(file.getName());
+			sb.append(' ').append(file.getName().replace(File.separatorChar, '/'));
 			return sb.toString();
 		}
 

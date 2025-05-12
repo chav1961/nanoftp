@@ -1,11 +1,9 @@
 package chav1961.nanoftp.internal;
 
-import java.util.HashSet;
 import java.util.Locale;
-import java.util.Set;
 
 import chav1961.nanoftp.internal.FTPSession.LoggingStatus;
-import chav1961.purelib.basic.Utils;
+import chav1961.purelib.i18n.interfaces.SupportedLanguages;
 
 public enum Commands {
 	USER(false, false, false, false, false, LoggingStatus.NOTLOGGEDIN, "<UserName>", "Type user name to logon"),
@@ -29,7 +27,7 @@ public enum Commands {
 	ALLO(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Space> [R <Space>]", "Try to allocate space for file to store"),
 	REST(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Marker>", "Restore transfer to typed marker"),
 	RNFR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Rename>", "Begin to rename file"),
-	RNTO(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<RenamedFileName>", "End to rename file"),
+	RNTO(false, false, false, false, false, LoggingStatus.RENAMESTARTED, "<RenamedFileName>", "End to rename file"),
 	ABOR(false, false, false, false, false, LoggingStatus.LOGGEDIN, "", "Cancel file transfer"),
 	DELE(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<File2Remove>", "Remove file typed"),
 	RMD(false, false, false, false, false, LoggingStatus.LOGGEDIN, "<Directory2Remove>", "Remove directory typed"),
@@ -57,6 +55,7 @@ public enum Commands {
 	ENC(false, true, false, false, false, null, "<base64-content>", "Privacy protection command"),
 	XENC(false, true, false, false, false, null, "<base64-content>", "Privacy protection command"),
 	FEAT(false, false, false, false, false, null, "", "Get list of features for the given FTP server"),
+	OPTS(false, false, false, false, false, null, "", "Set options for features on the given FTP server"),
 	EPSV(false, false, true, false, false, LoggingStatus.LOGGEDIN, "", "Enter passive mode (possibly IPv6 available)"),
 	EPRT(false, false, true, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
 	LANG(false, false, false, true, false, LoggingStatus.LOGGEDIN, "<base64-content>", "Language settings", getLangSettings()),
@@ -65,6 +64,7 @@ public enum Commands {
 	MLST(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Describe file properties"),
 	MLSD(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<Dir>]", "Describe directory properties"),
 	SIZE(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Get file size"),
+	UTF8(false, false, false, true, false, LoggingStatus.UNKNOWN, "", "Set UTF8 modes"),
 	;
 	
 	private final boolean		exitRequred;
@@ -83,9 +83,14 @@ public enum Commands {
 	
 	static String getLangSettings() {
 		final StringBuilder	sb = new StringBuilder();
-		final String		lang = Locale.getDefault().getLanguage().toUpperCase();
+		final String		lang = Locale.getDefault().getLanguage();
 		
-		sb.append(';').append(lang).append('*');
+		for (SupportedLanguages item : SupportedLanguages.values()) {
+			sb.append(';').append(item.getLocale().getLanguage().toUpperCase());
+			if (lang.equalsIgnoreCase(item.getLocale().getLanguage())) {
+				sb.append('*');
+			}
+		}
 		return "LANG "+sb.substring(1);
 	}
 
