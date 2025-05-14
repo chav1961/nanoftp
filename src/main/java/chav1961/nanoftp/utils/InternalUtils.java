@@ -1,9 +1,9 @@
-package chav1961.nanoftp.internal;
+package chav1961.nanoftp.utils;
 
 import java.util.Calendar;
 
-class InternalUtils {
-	static String milliseconds2Time(final long milliseconds) {
+public class InternalUtils {
+	public static String milliseconds2Time(final long milliseconds) {
 		final Calendar		cal = Calendar.getInstance();
 		
 		cal.setTimeInMillis(milliseconds);
