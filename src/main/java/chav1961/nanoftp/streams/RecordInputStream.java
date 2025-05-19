@@ -9,10 +9,12 @@ import java.io.InputStream;
  */
 public class RecordInputStream extends InputStream {
 	private static final int	ESCAPE = 0xFF;
+	private static final char[]	LS = System.lineSeparator().toCharArray();
 
 	private final InputStream	nested;
 	private final int[]	buffer = new int[3];
 	private int			count = 0;
+	private int			current = 0;
 	
 	public RecordInputStream(final InputStream nested) {
 		if (nested == null) {
@@ -26,7 +28,12 @@ public class RecordInputStream extends InputStream {
 	@Override
 	public int read() throws IOException {
 		if (count > 0) {
-			return buffer[count--];
+			final int	val = buffer[current++];
+			
+			if (current >= count) {
+				current = count = 0;
+			}
+			return val;
 		}
 		else {
 			int	value = nested.read();
@@ -45,8 +52,9 @@ public class RecordInputStream extends InputStream {
 				}
 				else {
 					if ((value & 0b00000001) != 0) {
-						buffer[count++] = '\r';
-						buffer[count++] = '\n';
+						for(; count < LS.length; count++) {
+							buffer[count] = LS[count];
+						}
 					}
 					if ((value & 0b00000010) != 0) {
 						buffer[count++] = -1;

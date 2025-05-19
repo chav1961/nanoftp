@@ -10,7 +10,8 @@ public class RecordOutputStream extends OutputStream {
 	private static final int	ESCAPE = 0xFF;
 	
 	private final OutputStream	nested;
-	private int	mask = 0;
+	private boolean	closed = false;
+	private int		mask = 0;
 	
 	public RecordOutputStream(final OutputStream nested) {
 		if (nested == null) {
@@ -34,29 +35,27 @@ public class RecordOutputStream extends OutputStream {
 			mask |= 0b00000001;
 		}
 		else {
-			if (mask != 0) {
-				finish();
-			}
+			finish();
 			nested.write(b);
 		}
 	}
 	
 	@Override
-	public void flush() throws IOException {
-		super.flush();
-	}
-	
-	@Override
 	public void close() throws IOException {
-		mask |= 0b00000010;
-		finish();
+		if (!closed) {
+			mask |= 0b00000010;
+			finish();
+			closed = true;
+		}
 		super.close();
 	}
 
 	public void finish() throws IOException {
-		nested.write(ESCAPE);
-		nested.write(mask);
-		mask = 0;
-		nested.flush();
+		if (mask != 0) {
+			nested.write(ESCAPE);
+			nested.write(mask);
+			mask = 0;
+			nested.flush();
+		}
 	}
 }
