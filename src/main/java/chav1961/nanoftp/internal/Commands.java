@@ -60,7 +60,7 @@ public enum Commands {
 	EPRT(false, false, true, false, false, LoggingStatus.LOGGEDIN, "|{1|2}|{<ipv4>|<ipv6>}|<port>|", "Enter active mode (possibly IPv6 available)"),
 	LANG(false, false, false, true, false, LoggingStatus.LOGGEDIN, "<base64-content>", "Language settings", getLangSettings()),
 	MDTM(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Get file modification time"),
-	TVFS(false, false, false, false, true, LoggingStatus.LOGGEDIN, "<base64-content>", "File modification time"),
+	TVFS(false, false, false, false, true, LoggingStatus.LOGGEDIN, "", "Support TVFS"),
 	MLST(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Describe file properties"),
 	MLSD(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<Dir>]", "Describe directory properties"),
 	SIZE(false, false, false, false, true, LoggingStatus.LOGGEDIN, "[<File>]", "Get file size"),

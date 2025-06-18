@@ -303,7 +303,9 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 							}
 							break;
 						// RFC-2228.
-						case AUTH:	// TODO:
+						case AUTH:
+							sendAnswer(MessageType.MSG_UNSUPPORTED_AUTH_EXTENSION);
+							break;
 						case ADAT:	// TODO:
 						case PROT:	// TODO:
 						case PBSZ:	// TODO:
@@ -336,13 +338,16 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 						// RFC-2640.
 						case LANG:
 							handleLang(args);
+							break;
 						// RFC-3659.
 						case SIZE:
 					  		handleSize(args);
 							break;
-						case MDTM:	// TODO:
-						case TVFS:	// TODO:
-					  		throw new UnsupportedOperationException("Command ["+c+"] is not supported yet");
+						case MDTM:
+					  		handleMdtm(args);
+							break;
+						case TVFS:
+					  		handleTvfs();
 						case MLST:
 							handleMlst(args.isEmpty() ? currDirectory : args);
 							break;
@@ -970,7 +975,22 @@ class FTPSession implements Runnable, LoggerFacadeOwner {
 			sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS);
 		}
 	}  
-  
+
+	private void handleMdtm(final String file) throws IOException {
+		final File	f = getFileDesc(file);
+	  
+		if (f.exists() && f.isFile()) {
+			sendAnswer(MessageType.MSG_FILE_MODIFICATION_TIME, InternalUtils.milliseconds2Time(f.lastModified()));
+		}
+		else {
+			sendAnswer(MessageType.MSG_FAILURE_FILE_NOT_EXISTS);
+		}
+	}  
+
+	private void handleTvfs() throws IOException {
+		sendAnswer(MessageType.MSG_UNKNOWN_COMMAND);
+	}  
+	
 	private void debug(final String msg) {
 		if (debugMode) {
 			getLogger().message(Severity.debug, "Thread " + Thread.currentThread().getName() + ": " + msg);
